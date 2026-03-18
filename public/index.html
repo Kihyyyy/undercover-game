@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Undercover</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  --bg: #080810;
+  --s1: #10101c;
+  --s2: #18182a;
+  --border: #252538;
+  --border2: #32324a;
+  --accent: #e8365d;
+  --accent-glow: rgba(232,54,93,0.25);
+  --teal: #00c9a0;
+  --amber: #f5a623;
+  --text: #eeeef5;
+  --muted: #5a5a78;
+  --muted2: #8888a8;
+  --r: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* noise */
+body::after {
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:9999;opacity:.35;
+}
+
+h1,h2,h3,h4,h5 { font-family:'Syne',sans-serif; letter-spacing:-0.02em; }
+
+/* ── SCREENS ── */
+.screen { display:none; min-height:100dvh; flex-direction:column; }
+.screen.active { display:flex; }
+
+/* ── HOME ── */
+#s-home {
+  align-items:center; justify-content:center; text-align:center;
+  padding:40px 24px;
+}
+.home-title {
+  font-size:clamp(56px,14vw,110px);
+  font-weight:800; line-height:.92;
+  margin-bottom:20px;
+}
+.home-title .r { color:var(--accent); }
+.home-title .d { color:var(--muted2); }
+.home-sub { color:var(--muted2); font-size:13px; max-width:320px; line-height:1.7; margin:0 auto 44px; }
+
+.home-actions { display:flex; flex-direction:column; gap:12px; width:100%; max-width:320px; }
+
+/* ── BUTTONS ── */
+.btn {
+  border:none; cursor:pointer; font-family:'Syne',sans-serif;
+  font-weight:700; border-radius:var(--r);
+  transition:transform .15s, box-shadow .15s, background .15s;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.btn:active { transform:scale(.97); }
+.btn-primary {
+  background:var(--accent); color:#fff;
+  padding:15px 32px; font-size:15px;
+  box-shadow:0 0 24px var(--accent-glow);
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow:0 0 36px var(--accent-glow); }
+.btn-ghost {
+  background:var(--s2); color:var(--text);
+  border:1px solid var(--border2);
+  padding:14px 28px; font-size:14px;
+}
+.btn-ghost:hover { background:var(--border); }
+.btn-sm {
+  padding:8px 16px; font-size:12px;
+}
+
+/* ── INPUTS ── */
+input[type=text], input[type=number], textarea, select {
+  background:var(--s1); border:1px solid var(--border);
+  color:var(--text); font-family:'Space Mono',monospace; font-size:14px;
+  padding:11px 14px; border-radius:var(--r); outline:none; width:100%;
+  transition:border-color .2s;
+}
+input:focus, textarea:focus { border-color:var(--accent); }
+textarea { resize:vertical; min-height:100px; }
+
+/* ── PAGE HEADER ── */
+.page-header {
+  padding:20px 20px 12px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:12px;
+}
+.logo-sm { font-family:'Syne',sans-serif; font-weight:800; font-size:18px; }
+.logo-sm span { color:var(--accent); }
+.back-btn {
+  background:none; border:none; color:var(--muted2);
+  font-family:'Space Mono',monospace; font-size:12px;
+  cursor:pointer; margin-left:auto;
+  transition:color .15s;
+}
+.back-btn:hover { color:var(--text); }
+
+/* ── CARDS ── */
+.card {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:var(--r); padding:16px 18px;
+}
+
+/* ── CODE DISPLAY ── */
+.room-code {
+  font-family:'Syne',sans-serif; font-size:48px; font-weight:800;
+  letter-spacing:.08em; color:var(--accent);
+  text-align:center; padding:12px 0 4px;
+}
+.code-sub { font-size:11px; color:var(--muted2); text-align:center; }
+
+/* ── PLAYER LIST ── */
+.player-list { display:flex; flex-direction:column; gap:6px; }
+.player-item {
+  display:flex; align-items:center; gap:10px;
+  background:var(--s2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 14px; font-size:13px;
+}
+.player-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--teal); flex-shrink:0;
+}
+.player-dot.off { background:var(--muted); }
+.player-dot.elim { background:var(--accent); }
+.player-name { flex:1; }
+.player-tag {
+  font-size:10px; padding:2px 8px; border-radius:20px;
+  font-weight:700; letter-spacing:.06em;
+}
+.tag-host { background:rgba(245,166,35,.15); color:var(--amber); }
+.tag-you  { background:rgba(0,201,160,.15); color:var(--teal); }
+
+/* ── SECTION LABEL ── */
+.section-label {
+  font-size:10px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted2); margin-bottom:8px;
+}
+
+/* ── PAGE CONTENT ── */
+.page-body { flex:1; padding:20px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+
+/* ── ROLE CARD (distribute) ── */
+.role-card-wrap { perspective:800px; }
+.role-card {
+  width:100%; height:190px; position:relative;
+  transform-style:preserve-3d;
+  transition:transform .6s cubic-bezier(.4,0,.2,1);
+}
+.role-card.flipped { transform:rotateY(180deg); }
+.role-face {
+  position:absolute; inset:0; border-radius:14px;
+  display:flex; align-items:center; justify-content:center;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  flex-direction:column; gap:10px;
+}
+.role-back {
+  background:var(--s2); border:1px solid var(--border2);
+  cursor:pointer; color:var(--muted2);
+  font-family:'Syne',sans-serif; font-size:15px; font-weight:700;
+}
+.role-back .icon { font-size:36px; }
+.role-front {
+  background:var(--s1); border:2px solid var(--border2);
+  transform:rotateY(180deg); padding:24px;
+}
+.role-word {
+  font-family:'Syne',sans-serif; font-size:30px; font-weight:800;
+  text-align:center; line-height:1.1;
+}
+.role-word.civilian { color:var(--teal); }
+.role-word.undercover { color:var(--accent); }
+.role-word.mrwhite { color:var(--amber); }
+.role-badge {
+  font-size:11px; color:var(--muted2); letter-spacing:.04em;
+}
+
+/* ── VOTE ── */
+.vote-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+  gap:8px;
+}
+.vote-card {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:var(--r); padding:12px; text-align:center;
+  position:relative; overflow:hidden;
+}
+.vote-card.eliminated { opacity:.35; }
+.vote-card.eliminated::after {
+  content:'✕'; position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:28px; color:var(--accent); opacity:.25;
+}
+.vote-card-name { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; margin-bottom:6px; }
+.vote-btn-inner {
+  background:var(--s2); border:1px solid var(--border2);
+  border-radius:6px; padding:7px 0; font-size:11px;
+  color:var(--muted2); cursor:pointer; width:100%;
+  font-family:'Space Mono',monospace;
+  transition:background .15s, color .15s, border-color .15s;
+}
+.vote-btn-inner:hover:not(:disabled) { background:var(--accent); color:#fff; border-color:var(--accent); }
+.vote-btn-inner:disabled { cursor:default; opacity:.4; }
+.voted-indicator { font-size:10px; color:var(--teal); margin-top:4px; }
+
+/* ── LOG ── */
+.game-log {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:var(--r); padding:12px 14px;
+  max-height:130px; overflow-y:auto;
+}
+.log-line { font-size:11px; color:var(--muted2); padding:3px 0; line-height:1.5; border-bottom:1px solid rgba(37,37,56,.5); }
+.log-line:last-child { border-bottom:none; }
+.log-line b { color:var(--text); font-weight:400; }
+
+/* ── END ── */
+#s-end { align-items:center; justify-content:center; text-align:center; padding:40px 24px; }
+.end-icon { font-size:64px; margin-bottom:12px; }
+.end-title { font-size:clamp(32px,8vw,56px); font-weight:800; line-height:1; margin-bottom:6px; }
+.end-sub { color:var(--muted2); font-size:13px; margin-bottom:28px; max-width:340px; }
+.reveal-grid {
+  display:flex; flex-wrap:wrap; gap:8px; justify-content:center;
+  margin-bottom:28px; max-width:520px;
+}
+.reveal-item {
+  background:var(--s2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 14px; text-align:left; min-width:110px;
+}
+.reveal-item .ri-name { font-family:'Syne',sans-serif; font-weight:700; font-size:13px; margin-bottom:3px; }
+.reveal-item .ri-role { font-size:11px; margin-bottom:1px; }
+.reveal-item .ri-word { font-size:11px; color:var(--muted2); }
+
+/* ── MR WHITE OVERLAY ── */
+.overlay {
+  position:fixed; inset:0; background:rgba(8,8,16,.95);
+  z-index:200; display:none;
+  align-items:center; justify-content:center; flex-direction:column;
+  gap:18px; text-align:center; padding:28px;
+}
+.overlay.active { display:flex; }
+.overlay h2 { font-size:28px; font-weight:800; color:var(--amber); }
+.overlay p { color:var(--muted2); font-size:13px; max-width:280px; line-height:1.6; }
+.overlay input { max-width:300px; text-align:center; font-size:18px; }
+
+/* ── TABS ── */
+.tabs { display:flex; gap:4px; background:var(--s1); border:1px solid var(--border); border-radius:8px; padding:4px; margin-bottom:12px; }
+.tab-btn { flex:1; background:none; border:none; color:var(--muted2); font-family:'Syne',sans-serif; font-size:12px; font-weight:700; padding:8px; border-radius:6px; cursor:pointer; transition:.15s; }
+.tab-btn.active { background:var(--s2); color:var(--text); }
+
+/* ── COUNTER ── */
+.counter-row { display:flex; align-items:center; gap:8px; }
+.counter-row input { flex:1; text-align:center; }
+.cnt-btn { background:var(--s2); border:1px solid var(--border); color:var(--text); width:36px; height:36px; border-radius:7px; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; flex-shrink:0; }
+.cnt-btn:hover { background:var(--border2); }
+
+/* ── WAITING ── */
+.waiting-badge { font-size:12px; color:var(--muted2); text-align:center; padding:8px 0; }
+.pulse-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+/* ── GRID2 ── */
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+/* ── ANIM ── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+.anim { animation:fadeUp .35s ease both; }
+
+/* ── PROGRESS ── */
+.progress-wrap { background:var(--border); border-radius:2px; height:3px; }
+.progress-fill { height:3px; background:var(--accent); border-radius:2px; transition:width .4s; }
+
+/* ── ERROR ── */
+.err { background:rgba(232,54,93,.1); border:1px solid rgba(232,54,93,.3); color:var(--accent); padding:10px 14px; border-radius:8px; font-size:12px; display:none; }
+.err.show { display:block; }
+
+/* ── NOTIFY ── */
+.notify {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:var(--s2); border:1px solid var(--border2);
+  border-radius:10px; padding:10px 20px; font-size:13px;
+  z-index:300; opacity:0; transition:opacity .3s;
+  white-space:nowrap; pointer-events:none;
+}
+.notify.show { opacity:1; }
+
+/* ── PAIR PREVIEW ── */
+.pair-preview { display:flex; flex-direction:column; gap:4px; margin-top:8px; max-height:160px; overflow-y:auto; }
+.pair-item { display:flex; gap:8px; align-items:center; background:var(--s2); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:12px; }
+.pair-civ { color:var(--teal); }
+.pair-spy { color:var(--accent); }
+.pair-sep { color:var(--muted); }
+
+/* mobile safe area */
+@media (max-width:400px) { .home-title { font-size:52px; } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HOME ═══════════════ -->
+<div id="s-home" class="screen active">
+  <div class="anim">
+    <div class="home-title"><span class="d">UNDER</span><br><span class="r">COVER</span></div>
+    <p class="home-sub">Jeu de déduction multijoueur en ligne. Trouve l'imposteur avant qu'il ne soit trop tard.</p>
+    <div class="home-actions">
+      <button class="btn btn-primary" onclick="showCreate()">Créer un salon</button>
+      <button class="btn btn-ghost" onclick="showJoin()">Rejoindre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CREATE ═══════════════ -->
+<div id="s-create" class="screen">
+  <div class="page-header">
+    <div class="logo-sm">UNDER<span>COVER</span></div>
+    <button class="back-btn" onclick="goHome()">← Retour</button>
+  </div>
+  <div class="page-body">
+    <div>
+      <div class="section-label">Ton pseudo</div>
+      <input type="text" id="create-name" placeholder="Ton nom…" maxlength="20">
+    </div>
+    <div class="err" id="create-err"></div>
+    <button class="btn btn-primary" onclick="createRoom()">Créer le salon →</button>
+  </div>
+</div>
+
+<!-- ═══════════════ JOIN ═══════════════ -->
+<div id="s-join" class="screen">
+  <div class="page-header">
+    <div class="logo-sm">UNDER<span>COVER</span></div>
+    <button class="back-btn" onclick="goHome()">← Retour</button>
+  </div>
+  <div class="page-body">
+    <div>
+      <div class="section-label">Ton pseudo</div>
+      <input type="text" id="join-name" placeholder="Ton nom…" maxlength="20">
+    </div>
+    <div>
+      <div class="section-label">Code du salon</div>
+      <input type="text" id="join-code" placeholder="EX: AB3X" maxlength="4" style="text-transform:uppercase;font-size:22px;text-align:center;letter-spacing:.1em">
+    </div>
+    <div class="err" id="join-err"></div>
+    <button class="btn btn-primary" onclick="joinRoom()">Rejoindre →</button>
+  </div>
+</div>
+
+<!-- ═══════════════ LOBBY ═══════════════ -->
+<div id="s-lobby" class="screen">
+  <div class="page-header">
+    <div class="logo-sm">UNDER<span>COVER</span></div>
+    <button class="back-btn" onclick="goHome()">Quitter</button>
+  </div>
+  <div class="page-body">
+
+    <!-- Code -->
+    <div class="card">
+      <div class="section-label">Code du salon</div>
+      <div class="room-code" id="lobby-code">----</div>
+      <div class="code-sub">Partage ce code à tes amis</div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" onclick="copyCode()">📋 Copier le lien</button>
+    </div>
+
+    <!-- Players -->
+    <div>
+      <div class="section-label">Joueurs (<span id="lobby-count">0</span>)</div>
+      <div class="player-list" id="lobby-players"></div>
+    </div>
+
+    <!-- Host config -->
+    <div id="host-config" style="display:none">
+      <div class="section-label">Configuration (hôte)</div>
+
+      <div class="grid2" style="margin-bottom:10px">
+        <div>
+          <div class="section-label">Undercovers</div>
+          <div class="counter-row">
+            <button class="cnt-btn" onclick="cfgChange('numUndercover',-1)">−</button>
+            <input type="number" id="cfg-uc" value="1" min="0" max="5" onchange="cfgInput()">
+            <button class="cnt-btn" onclick="cfgChange('numUndercover',1)">+</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">Mr. White</div>
+          <div class="counter-row">
+            <button class="cnt-btn" onclick="cfgChange('numMrWhite',-1)">−</button>
+            <input type="number" id="cfg-mw" value="0" min="0" max="3" onchange="cfgInput()">
+            <button class="cnt-btn" onclick="cfgChange('numMrWhite',1)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Words -->
+      <div class="section-label">Paires de mots</div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchWordTab('paste')">Coller</button>
+        <button class="tab-btn" onclick="switchWordTab('manual')">Manuel</button>
+      </div>
+      <div id="word-tab-paste">
+        <textarea id="paste-words" placeholder="Naruto | Sasuke&#10;One Piece | Fairy Tail&#10;Goku | Vegeta&#10;&#10;Séparateur : | - , ou ;"></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%" onclick="parsePaste()">Analyser →</button>
+      </div>
+      <div id="word-tab-manual" style="display:none">
+        <div class="grid2" style="margin-bottom:6px">
+          <input type="text" id="m-civ" placeholder="Mot civil">
+          <input type="text" id="m-spy" placeholder="Mot undercover">
+        </div>
+        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="addManual()">+ Ajouter</button>
+      </div>
+      <div class="pair-preview" id="pair-preview"></div>
+      <div style="font-size:11px;color:var(--muted2);margin-top:4px" id="pair-count"></div>
+
+      <div class="err" id="lobby-err" style="margin-top:8px"></div>
+      <button class="btn btn-primary" style="margin-top:14px;width:100%" onclick="startGame()">🎮 Lancer la partie</button>
+    </div>
+
+    <div id="guest-wait" style="display:none">
+      <div class="waiting-badge"><span class="pulse-dot"></span> En attente que l'hôte lance la partie…</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ DISTRIBUTE ═══════════════ -->
+<div id="s-distribute" class="screen">
+  <div class="page-header">
+    <div class="logo-sm">UNDER<span>COVER</span></div>
+    <div style="margin-left:auto;font-size:12px;color:var(--muted2)" id="dist-progress-lbl">1 / 6</div>
+  </div>
+  <div class="page-body" style="align-items:center;text-align:center">
+    <div class="progress-wrap" style="width:100%">
+      <div class="progress-fill" id="dist-bar" style="width:0%"></div>
+    </div>
+    <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800" id="dist-player-name">—</div>
+    <p style="font-size:12px;color:var(--muted2);max-width:280px;line-height:1.6">
+      Appuie sur la carte pour voir ton rôle secret.<br>Ne montre pas l'écran.
+    </p>
+
+    <div class="role-card-wrap" style="width:100%;max-width:340px">
+      <div class="role-card" id="role-card">
+        <div class="role-face role-back" onclick="flipCard()">
+          <div class="icon">🃏</div>
+          <div>Retourner la carte</div>
+        </div>
+        <div class="role-face role-front">
+          <div class="section-label">Ton rôle</div>
+          <div class="role-word" id="dist-word">—</div>
+          <div class="role-badge" id="dist-role-badge">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Host: next button -->
+    <div id="dist-host-actions" style="display:none;width:100%;max-width:340px">
+      <button class="btn btn-ghost" style="width:100%;margin-top:4px" id="dist-next-btn" onclick="nextDistribute()">Suivant →</button>
+    </div>
+    <!-- Guest: waiting -->
+    <div id="dist-guest-wait" style="display:none">
+      <div class="waiting-badge"><span class="pulse-dot"></span> En attente de l'hôte…</div>
+    </div>
+
+    <div id="dist-seen-msg" style="display:none;font-size:12px;color:var(--teal)">✓ Vu ! En attente du suivant…</div>
+  </div>
+</div>
+
+<!-- ═══════════════ GAME ═══════════════ -->
+<div id="s-game" class="screen">
+  <div class="page-header">
+    <div class="logo-sm">UNDER<span>COVER</span></div>
+    <div style="font-size:11px;color:var(--muted2);margin-left:auto" id="game-round-lbl">Tour 1</div>
+  </div>
+  <div class="page-body">
+    <!-- My role reminder -->
+    <div class="card" id="my-role-card" style="text-align:center">
+      <div class="section-label">Ton rôle</div>
+      <div class="role-word" id="my-role-word" style="font-size:22px">—</div>
+      <div class="role-badge" id="my-role-badge">—</div>
+    </div>
+
+    <!-- Log -->
+    <div class="game-log" id="game-log"></div>
+
+    <!-- Vote -->
+    <div>
+      <div class="section-label">Voter pour éliminer</div>
+      <div class="vote-grid" id="vote-grid"></div>
+    </div>
+
+    <!-- Host: next round -->
+    <div id="host-next-round" style="display:none">
+      <button class="btn btn-ghost" style="width:100%" onclick="nextRound()">→ Tour suivant</button>
+    </div>
+
+    <!-- Waiting for votes -->
+    <div id="vote-wait" style="display:none">
+      <div class="waiting-badge"><span class="pulse-dot"></span> Vote en cours…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ END ═══════════════ -->
+<div id="s-end" class="screen">
+  <div class="page-body" style="align-items:center;text-align:center;justify-content:center">
+    <div class="end-icon" id="end-icon">🏆</div>
+    <div class="end-title" id="end-title">Civils gagnent !</div>
+    <div class="end-sub" id="end-sub">—</div>
+    <div class="reveal-grid" id="reveal-grid"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-primary" id="restart-btn" style="display:none" onclick="restartGame()">Rejouer</button>
+      <button class="btn btn-ghost" onclick="goHome()">Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MR WHITE OVERLAY ═══════════════ -->
+<div class="overlay" id="mw-overlay">
+  <div style="font-size:48px">👤</div>
+  <h2>Mr. White éliminé !</h2>
+  <p>Tu as une chance. Devine le mot civil :</p>
+  <input type="text" id="mw-guess" placeholder="Ton mot…" onkeydown="if(event.key==='Enter')sendMrWhiteGuess()">
+  <button class="btn btn-primary" onclick="sendMrWhiteGuess()">Valider</button>
+  <div id="mw-wait" style="display:none;font-size:12px;color:var(--muted2)"><span class="pulse-dot"></span> Mr. White réfléchit…</div>
+</div>
+
+<!-- ═══════════════ NOTIFY ═══════════════ -->
+<div class="notify" id="notify"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+const socket = io();
+let myId = null;
+let myCode = null;
+let myRole = null;
+let myWord = null;
+let myName = null;
+let gameState = null;
+let localPairs = [];
+let cardFlipped = false;
+let myVote = null;
+
+// ── SCREENS ────────────────────────────────────────────────────────────────
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+function goHome() { myId=null; myCode=null; myRole=null; myWord=null; myVote=null; goTo('s-home'); }
+function showCreate() { goTo('s-create'); }
+function showJoin() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('code')) document.getElementById('join-code').value = params.get('code').toUpperCase();
+  goTo('s-join');
+}
+
+// ── SOCKET EVENTS ──────────────────────────────────────────────────────────
+socket.on('room_joined', ({ code, playerId }) => {
+  myId = playerId;
+  myCode = code;
+  document.getElementById('lobby-code').textContent = code;
+  goTo('s-lobby');
+});
+
+socket.on('game_state', (state) => {
+  gameState = state;
+  renderState(state);
+});
+
+socket.on('your_role', ({ role, word }) => {
+  myRole = role;
+  myWord = word;
+});
+
+socket.on('reveal', ({ role, word, chosenPair, players }) => {
+  myRole = role;
+  myWord = word;
+  renderEnd(chosenPair, players);
+});
+
+socket.on('error', (msg) => notify(msg));
+
+// ── RENDER STATE ───────────────────────────────────────────────────────────
+function renderState(s) {
+  const me = s.players.find(p => p.id === myId);
+  const isHost = s.host === myId;
+
+  if (s.phase === 'lobby') {
+    renderLobby(s, me, isHost);
+    goTo('s-lobby');
+  } else if (s.phase === 'distribute') {
+    renderDistribute(s, me, isHost);
+    // Only switch to distribute screen if not already there or if coming from lobby
+    const curr = document.querySelector('.screen.active');
+    if (!curr || curr.id !== 's-distribute') goTo('s-distribute');
+  } else if (s.phase === 'game') {
+    renderGame(s, me, isHost);
+    const curr = document.querySelector('.screen.active');
+    if (!curr || (curr.id !== 's-game')) goTo('s-game');
+  } else if (s.phase === 'mrwhite_guess') {
+    renderGame(s, me, isHost);
+    const curr = document.querySelector('.screen.active');
+    if (!curr || curr.id !== 's-game') goTo('s-game');
+    // Show MrWhite overlay only for mr white
+    if (myRole === 'mrwhite' && me && me.eliminated) {
+      document.getElementById('mw-overlay').classList.add('active');
+    }
+  } else if (s.phase === 'end') {
+    // end rendered via 'reveal' event
+  }
+}
+
+// ── LOBBY ──────────────────────────────────────────────────────────────────
+function renderLobby(s, me, isHost) {
+  document.getElementById('lobby-code').textContent = s.code;
+  document.getElementById('lobby-count').textContent = s.players.length;
+  const list = document.getElementById('lobby-players');
+  list.innerHTML = s.players.map(p => `
+    <div class="player-item">
+      <div class="player-dot ${p.connected ? '' : 'off'}"></div>
+      <div class="player-name">${esc(p.name)}</div>
+      ${p.id === s.host ? '<span class="player-tag tag-host">Hôte</span>' : ''}
+      ${p.id === myId ? '<span class="player-tag tag-you">Toi</span>' : ''}
+    </div>`).join('');
+  document.getElementById('host-config').style.display = isHost ? '' : 'none';
+  document.getElementById('guest-wait').style.display = isHost ? 'none' : '';
+  if (isHost) renderPairPreview();
+}
+
+function renderPairPreview() {
+  const el = document.getElementById('pair-preview');
+  el.innerHTML = localPairs.slice(0,10).map(p =>
+    `<div class="pair-item"><span class="pair-civ">${esc(p.civ)}</span><span class="pair-sep">|</span><span class="pair-spy">${esc(p.spy)}</span></div>`
+  ).join('');
+  document.getElementById('pair-count').textContent = localPairs.length > 0 ? `${localPairs.length} paire(s)` : '';
+}
+
+// ── DISTRIBUTE ─────────────────────────────────────────────────────────────
+function renderDistribute(s, me, isHost) {
+  const total = s.players.length;
+  const idx = s.distributeIndex;
+  const currentPlayer = s.players[idx];
+  const isMe = currentPlayer && currentPlayer.id === myId;
+
+  document.getElementById('dist-progress-lbl').textContent = `${idx + 1} / ${total}`;
+  document.getElementById('dist-bar').style.width = `${(idx / total) * 100}%`;
+  document.getElementById('dist-player-name').textContent = currentPlayer ? currentPlayer.name : '';
+
+  // Reset card flip
+  const card = document.getElementById('role-card');
+  card.classList.remove('flipped');
+  cardFlipped = false;
+  document.getElementById('dist-seen-msg').style.display = 'none';
+
+  // Set role info (only visible to current player)
+  if (isMe && myRole) {
+    if (myRole === 'mrwhite') {
+      document.getElementById('dist-word').textContent = '???';
+      document.getElementById('dist-word').className = 'role-word mrwhite';
+      document.getElementById('dist-role-badge').textContent = '⚪ Mr. White — tu ne connais pas le mot !';
+    } else {
+      document.getElementById('dist-word').textContent = myWord || '—';
+      document.getElementById('dist-word').className = `role-word ${myRole}`;
+      document.getElementById('dist-role-badge').textContent = myRole === 'civilian' ? '🟢 Civil' : '🔴 Undercover — tu es l\'imposteur !';
+    }
+  } else {
+    document.getElementById('dist-word').textContent = '?';
+    document.getElementById('dist-word').className = 'role-word';
+    document.getElementById('dist-role-badge').textContent = 'Retourne la carte pour voir ton rôle';
+  }
+
+  // Host controls next btn (only after current player flipped)
+  const hostActions = document.getElementById('dist-host-actions');
+  const guestWait = document.getElementById('dist-guest-wait');
+  if (isHost) {
+    hostActions.style.display = '';
+    const nextBtn = document.getElementById('dist-next-btn');
+    const isLast = idx >= total - 1;
+    nextBtn.textContent = isLast ? '🎮 Démarrer !' : 'Suivant →';
+    guestWait.style.display = 'none';
+  } else {
+    hostActions.style.display = 'none';
+    guestWait.style.display = '';
+  }
+}
+
+function flipCard() {
+  if (cardFlipped) return;
+  cardFlipped = true;
+  document.getElementById('role-card').classList.add('flipped');
+  socket.emit('role_seen', { code: myCode });
+  document.getElementById('dist-seen-msg').style.display = 'block';
+}
+
+function nextDistribute() {
+  socket.emit('next_distribute', { code: myCode });
+}
+
+// ── GAME ───────────────────────────────────────────────────────────────────
+function renderGame(s, me, isHost) {
+  document.getElementById('game-round-lbl').textContent = `Tour ${s.round}`;
+
+  // My role reminder
+  if (myRole) {
+    const rw = document.getElementById('my-role-word');
+    const rb = document.getElementById('my-role-badge');
+    if (myRole === 'mrwhite') {
+      rw.textContent = '???'; rw.className = 'role-word mrwhite';
+      rb.textContent = '⚪ Mr. White';
+    } else {
+      rw.textContent = myWord || '—'; rw.className = `role-word ${myRole}`;
+      rb.textContent = myRole === 'civilian' ? '🟢 Civil' : '🔴 Undercover';
+    }
+  }
+
+  // Log
+  const log = document.getElementById('game-log');
+  log.innerHTML = s.logs.slice(-15).map(l => `<div class="log-line">${esc(l)}</div>`).join('');
+  log.scrollTop = log.scrollHeight;
+
+  // Vote grid
+  const grid = document.getElementById('vote-grid');
+  const iAmElim = me && me.eliminated;
+  const voteCount = Object.keys(s.votes).length;
+  const aliveCount = s.players.filter(p => !p.eliminated).length;
+
+  grid.innerHTML = s.players.map(p => {
+    const elim = p.eliminated;
+    const iTarget = myVote === p.id;
+    return `<div class="vote-card ${elim ? 'eliminated' : ''}">
+      <div class="vote-card-name">${esc(p.name)}</div>
+      ${!elim ? `<button class="vote-btn-inner" ${(iAmElim || elim) ? 'disabled' : ''} onclick="castVote('${p.id}')"
+        style="${iTarget ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''}">
+        ${iTarget ? '✓ Voté' : 'Voter'}
+      </button>` : ''}
+    </div>`;
+  }).join('');
+
+  document.getElementById('host-next-round').style.display = isHost ? '' : 'none';
+  document.getElementById('vote-wait').style.display = voteCount > 0 ? '' : 'none';
+  if (voteCount > 0) {
+    document.getElementById('vote-wait').querySelector('.waiting-badge').innerHTML =
+      `<span class="pulse-dot"></span> Votes : ${voteCount} / ${aliveCount}`;
+  }
+}
+
+function castVote(targetId) {
+  if (myVote) return; // already voted
+  myVote = targetId;
+  socket.emit('vote', { code: myCode, targetId });
+  renderGame(gameState, gameState.players.find(p => p.id === myId), gameState.host === myId);
+}
+
+function nextRound() {
+  myVote = null;
+  socket.emit('next_round', { code: myCode });
+}
+
+// ── MR WHITE GUESS ─────────────────────────────────────────────────────────
+function sendMrWhiteGuess() {
+  const guess = document.getElementById('mw-guess').value.trim();
+  if (!guess) return;
+  socket.emit('mrwhite_guess', { code: myCode, guess });
+  document.getElementById('mw-overlay').classList.remove('active');
+}
+
+// ── END ────────────────────────────────────────────────────────────────────
+function renderEnd(chosenPair, players) {
+  const w = gameState ? gameState.winner : null;
+  const icons = { civilian:'🟢', undercover:'💀', mrwhite:'⚪' };
+  const titles = { civilian:'Les Civils gagnent !', undercover:'L\'Undercover gagne !', mrwhite:'Mr. White gagne !' };
+  const subs = {
+    civilian:`Mot civil : <b>${esc(chosenPair?.civ)}</b> — Mot undercover : <b>${esc(chosenPair?.spy)}</b>`,
+    undercover:`L'imposteur a semé la confusion. Mot undercover : <b>${esc(chosenPair?.spy)}</b>`,
+    mrwhite:`Mr. White a deviné le mot civil : <b>${esc(chosenPair?.civ)}</b> !`,
+  };
+  document.getElementById('end-icon').textContent = icons[w] || '🏆';
+  document.getElementById('end-title').textContent = titles[w] || 'Partie terminée';
+  document.getElementById('end-sub').innerHTML = subs[w] || '';
+
+  const grid = document.getElementById('reveal-grid');
+  grid.innerHTML = (players||[]).map(p => {
+    const col = p.role === 'civilian' ? 'var(--teal)' : p.role === 'undercover' ? 'var(--accent)' : 'var(--amber)';
+    return `<div class="reveal-item">
+      <div class="ri-name">${esc(p.name)}</div>
+      <div class="ri-role" style="color:${col}">${roleLabel(p.role)}</div>
+      <div class="ri-word">${p.word ? esc(p.word) : '???'}</div>
+    </div>`;
+  }).join('');
+
+  const isHost = gameState && gameState.host === myId;
+  document.getElementById('restart-btn').style.display = isHost ? '' : 'none';
+  goTo('s-end');
+}
+
+function restartGame() {
+  myVote = null; myRole = null; myWord = null;
+  socket.emit('restart', { code: myCode });
+}
+
+// ── CREATE / JOIN ──────────────────────────────────────────────────────────
+function createRoom() {
+  myName = document.getElementById('create-name').value.trim();
+  if (!myName) return showErr('create-err', 'Entre ton pseudo.');
+  socket.emit('create_room', { name: myName });
+}
+
+function joinRoom() {
+  myName = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!myName) return showErr('join-err', 'Entre ton pseudo.');
+  if (code.length < 4) return showErr('join-err', 'Entre le code à 4 lettres.');
+  socket.emit('join_room', { code, name: myName });
+}
+
+// ── CONFIG (host) ──────────────────────────────────────────────────────────
+function cfgChange(field, delta) {
+  const elId = field === 'numUndercover' ? 'cfg-uc' : 'cfg-mw';
+  const el = document.getElementById(elId);
+  const min = 0, max = field === 'numUndercover' ? 5 : 3;
+  el.value = Math.min(max, Math.max(min, parseInt(el.value||0) + delta));
+  pushConfig();
+}
+function cfgInput() { pushConfig(); }
+function pushConfig() {
+  socket.emit('update_config', {
+    code: myCode,
+    config: {
+      numUndercover: parseInt(document.getElementById('cfg-uc').value)||0,
+      numMrWhite: parseInt(document.getElementById('cfg-mw').value)||0,
+    }
+  });
+}
+
+// ── WORDS ──────────────────────────────────────────────────────────────────
+function switchWordTab(tab) {
+  document.querySelectorAll('.tabs .tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0)===(tab==='paste')));
+  document.getElementById('word-tab-paste').style.display = tab==='paste' ? '' : 'none';
+  document.getElementById('word-tab-manual').style.display = tab==='manual' ? '' : 'none';
+}
+
+function parsePaste() {
+  const raw = document.getElementById('paste-words').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l);
+  const pairs = [];
+  for (const line of lines) {
+    const sep = line.match(/[|,;–\-]/);
+    if (sep) {
+      const parts = line.split(sep[0]).map(p=>p.trim()).filter(p=>p);
+      if (parts.length >= 2) pairs.push({ civ: parts[0], spy: parts[1] });
+      else if (parts.length === 1) pairs.push({ civ: parts[0], spy: parts[0] });
+    } else {
+      pairs.push({ civ: line, spy: line });
+    }
+  }
+  localPairs = pairs;
+  socket.emit('set_word_pairs', { code: myCode, pairs: localPairs });
+  renderPairPreview();
+}
+
+function addManual() {
+  const civ = document.getElementById('m-civ').value.trim();
+  const spy = document.getElementById('m-spy').value.trim();
+  if (!civ || !spy) return notify('Remplis les deux mots.');
+  localPairs.push({ civ, spy });
+  document.getElementById('m-civ').value = '';
+  document.getElementById('m-spy').value = '';
+  socket.emit('set_word_pairs', { code: myCode, pairs: localPairs });
+  renderPairPreview();
+}
+
+function startGame() {
+  hideErr('lobby-err');
+  const n = gameState ? gameState.players.length : 0;
+  const uc = parseInt(document.getElementById('cfg-uc').value)||0;
+  const mw = parseInt(document.getElementById('cfg-mw').value)||0;
+  if (n - uc - mw < 1) return showErr('lobby-err', 'Pas assez de civils. Réduis les rôles spéciaux.');
+  if (localPairs.length === 0) return showErr('lobby-err', 'Ajoute au moins une paire de mots.');
+  socket.emit('start_game', { code: myCode });
+}
+
+// ── COPY LINK ──────────────────────────────────────────────────────────────
+function copyCode() {
+  const url = `${window.location.origin}?code=${myCode}`;
+  navigator.clipboard.writeText(url).then(() => notify('Lien copié ! Partage-le à tes amis.'));
+}
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function roleLabel(r) {
+  if (r==='civilian') return '🟢 Civil';
+  if (r==='undercover') return '🔴 Undercover';
+  return '⚪ Mr. White';
+}
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+}
+function hideErr(id) { document.getElementById(id).classList.remove('show'); }
+
+let notifyTimeout;
+function notify(msg) {
+  const el = document.getElementById('notify');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(notifyTimeout);
+  notifyTimeout = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Check for code in URL on load
+window.addEventListener('load', () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('code')) showJoin();
+});
+</script>
+</body>
+</html>
