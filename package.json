@@ -1,7 +1,7 @@
 {
   "name": "undercover-game",
-  "version": "1.0.0",
-  "description": "Undercover / Imposteur multiplayer game",
+  "version": "2.0.0",
+  "description": "Undercover multiplayer game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
