@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Undercover</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #f5f4f0;
+  --s1: #ffffff;
+  --s2: #eeecea;
+  --s3: #e4e2de;
+  --border: #dddbd7;
+  --border2: #ccc9c4;
+  --accent: #e8365d;
+  --aglow: rgba(232,54,93,0.15);
+  --teal: #00a884;
+  --amber: #d4870a;
+  --blue: #2d7dd2;
+  --text: #1a1916;
+  --muted: #9e9b96;
+  --muted2: #6e6b65;
+  --r: 10px;
+  --rl: 16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-height:100dvh;overflow-x:hidden;}
+h1,h2,h3,h4{font-family:'Syne',sans-serif;letter-spacing:-0.02em;}
+
+/* SCREENS */
+.screen{display:none;min-height:100dvh;flex-direction:column;}
+.screen.active{display:flex;}
+
+/* HEADER */
+.hdr{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--s1);}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;color:var(--text);}
+.logo span{color:var(--accent);}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+/* BODY */
+.pg{flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
+
+/* BUTTONS */
+.btn{border:none;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700;border-radius:var(--r);transition:transform .15s,box-shadow .15s,background .15s,opacity .15s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.4;cursor:default;}
+.btn-p{background:var(--accent);color:#fff;padding:14px 28px;font-size:14px;box-shadow:0 2px 12px var(--aglow);}
+.btn-p:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 20px var(--aglow);}
+.btn-g{background:var(--s1);color:var(--text);border:1px solid var(--border2);padding:12px 22px;font-size:13px;}
+.btn-g:hover:not(:disabled){background:var(--s2);}
+.btn-sm{padding:7px 14px;font-size:11px;}
+.btn-danger{background:rgba(232,54,93,.08);color:var(--accent);border:1px solid rgba(232,54,93,.2);padding:10px 18px;font-size:12px;}
+
+/* INPUTS */
+input,textarea,select{background:var(--s1);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;padding:10px 13px;border-radius:var(--r);outline:none;width:100%;transition:border-color .2s;}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:90px;}
+
+/* LABELS */
+.lbl{font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px;}
+.field{display:flex;flex-direction:column;gap:0;}
+
+/* CARD */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;}
+
+/* HOME */
+#s-home{align-items:center;justify-content:center;text-align:center;padding:40px 20px;background:var(--bg);}
+.home-title{font-size:clamp(60px,15vw,100px);font-weight:800;line-height:.9;margin-bottom:16px;}
+.home-title .r{color:var(--accent);}
+.home-title .d{color:var(--text);}
+.home-sub{color:var(--muted2);font-size:12px;max-width:280px;line-height:1.7;margin:0 auto 36px;}
+.home-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;}
+
+/* AVATAR PICKER */
+.avatar-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.av-opt{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;border:2px solid transparent;transition:border-color .15s,transform .15s;flex-shrink:0;}
+.av-opt:hover{transform:scale(1.1);}
+.av-opt.selected{border-color:var(--accent);}
+
+/* ROOM CODE */
+.room-code{font-family:'Syne',sans-serif;font-size:44px;font-weight:800;letter-spacing:.1em;color:var(--accent);text-align:center;padding:8px 0 2px;}
+.code-sub{font-size:11px;color:var(--muted2);text-align:center;}
+
+/* PLAYER LIST */
+.player-list{display:flex;flex-direction:column;gap:5px;}
+.player-item{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:9px 13px;font-size:12px;}
+.p-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.p-name{flex:1;font-weight:500;}
+.p-tag{font-size:9px;padding:2px 7px;border-radius:20px;font-weight:700;letter-spacing:.06em;}
+.tag-host{background:rgba(212,135,10,.15);color:var(--amber);}
+.tag-you{background:rgba(0,168,132,.15);color:var(--teal);}
+.p-score{font-size:11px;color:var(--amber);font-weight:500;}
+.p-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;}
+.p-dot.off{background:var(--muted);}
+
+/* COUNTER */
+.counter-row{display:flex;align-items:center;gap:6px;}
+.counter-row input{flex:1;text-align:center;}
+.cnt-btn{background:var(--s1);border:1px solid var(--border2);color:var(--text);width:34px;height:34px;border-radius:7px;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0;font-family:'Syne',sans-serif;}
+.cnt-btn:hover{background:var(--s2);}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+
+/* TOGGLE */
+.toggle-wrap{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;}
+.toggle-track{position:relative;width:36px;height:20px;background:var(--border2);border-radius:10px;transition:background .2s;flex-shrink:0;}
+.toggle-track.on{background:var(--teal);}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s;}
+.toggle-track.on .toggle-thumb{transform:translateX(16px);}
+.toggle-label{font-size:12px;color:var(--muted2);}
+
+/* TABS */
+.tabs{display:flex;gap:3px;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:3px;margin-bottom:10px;}
+.tab-btn{flex:1;background:none;border:none;color:var(--muted2);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;padding:7px;border-radius:6px;cursor:pointer;transition:.15s;}
+.tab-btn.active{background:var(--s1);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+
+/* PRESET LISTS */
+.preset-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.preset-btn{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:border-color .2s,background .2s;text-align:left;display:flex;flex-direction:column;gap:3px;}
+.preset-btn:hover{border-color:var(--accent);background:var(--s2);}
+.preset-btn.active{border-color:var(--accent);background:rgba(232,54,93,.05);}
+.preset-btn .preset-icon{font-size:18px;}
+.preset-btn .preset-name{color:var(--text);}
+.preset-btn .preset-count{font-size:9px;color:var(--muted2);font-family:'DM Mono',monospace;font-weight:400;}
+
+/* PAIR PREVIEW */
+.pair-preview{display:flex;flex-direction:column;gap:3px;margin-top:8px;max-height:140px;overflow-y:auto;}
+.pair-item{display:flex;gap:6px;align-items:center;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;}
+.pair-civ{color:var(--teal);}
+.pair-spy{color:var(--accent);}
+.pair-sep{color:var(--muted);}
+
+/* WORDS PHASE - new player grid */
+.words-players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;}
+.word-player-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;transition:border-color .3s,box-shadow .3s;}
+.word-player-card.active-turn{border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,54,93,.15);}
+.word-player-card.eliminated{opacity:.35;}
+.wpc-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 6px;}
+.wpc-name{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wpc-words{display:flex;flex-direction:column;gap:2px;min-height:18px;}
+.wpc-word{font-size:10px;color:var(--muted2);background:var(--s2);border-radius:4px;padding:2px 5px;word-break:break-word;}
+
+/* TIMER */
+.timer-wrap{width:100%;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.timer-fill{height:4px;border-radius:2px;transition:width 1s linear,background .5s;}
+.timer-num{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;text-align:center;color:var(--text);}
+.timer-num.urgent{color:var(--accent);animation:pulse-num .5s infinite alternate;}
+@keyframes pulse-num{from{opacity:1}to{opacity:.5}}
+
+/* VOTE */
+.vote-section{display:flex;flex-direction:column;gap:10px;}
+.vote-players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
+.vote-player-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px 8px;text-align:center;position:relative;overflow:hidden;transition:border-color .2s;}
+.vote-player-card.eliminated{opacity:.3;}
+.vote-player-card.voted-by-me{border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,54,93,.15);}
+.vote-player-card.is-me{opacity:.5;}
+.vpc-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 5px;}
+.vpc-name{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;margin-bottom:4px;}
+.vpc-words{display:flex;flex-direction:column;gap:2px;margin-bottom:6px;min-height:16px;}
+.vpc-word{font-size:10px;color:var(--muted2);background:var(--s2);border-radius:4px;padding:2px 5px;word-break:break-word;}
+.vpc-vote-btn{background:var(--s2);border:1px solid var(--border2);border-radius:6px;padding:6px 0;font-size:10px;color:var(--muted2);cursor:pointer;width:100%;font-family:'DM Mono',monospace;transition:background .15s,color .15s,border-color .15s;}
+.vpc-vote-btn:hover:not(:disabled){background:var(--accent);color:#fff;border-color:var(--accent);}
+.vpc-vote-btn:disabled{cursor:default;opacity:.4;}
+.vpc-vote-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* VOTE TABLE */
+.vote-table{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.vote-table-title{padding:10px 14px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);border-bottom:1px solid var(--border);}
+.vote-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;}
+.vote-row:last-child{border-bottom:none;}
+.vr-voter{display:flex;align-items:center;gap:7px;width:100px;flex-shrink:0;}
+.vr-voter-av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;}
+.vr-arrow{color:var(--muted);font-size:11px;flex-shrink:0;}
+.vr-target{display:flex;align-items:center;gap:7px;flex:1;}
+.vr-target-av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;}
+.vr-waiting{color:var(--muted);font-size:11px;font-style:italic;}
+
+/* LOG */
+.game-log{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px 13px;max-height:100px;overflow-y:auto;}
+.log-line{font-size:11px;color:var(--muted2);padding:2px 0;line-height:1.5;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:4px;}
+.log-line:last-child{border-bottom:none;margin-bottom:0;}
+
+/* ROUND RECAP */
+.recap-header{text-align:center;padding:16px 0 8px;}
+.recap-winner{font-size:36px;font-weight:800;font-family:'Syne',sans-serif;}
+.recap-winner.civilian{color:var(--teal);}
+.recap-winner.undercover{color:var(--accent);}
+.recap-winner.mrwhite{color:var(--amber);}
+.recap-pair{font-size:12px;color:var(--muted2);margin-top:4px;}
+.recap-pair b{color:var(--text);}
+.recap-players{display:flex;flex-direction:column;gap:5px;margin-top:10px;}
+.recap-player{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:9px 13px;}
+.rp-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.rp-name{flex:1;font-size:12px;font-weight:500;}
+.rp-role{font-size:10px;}
+.rp-score{font-size:13px;font-family:'Syne',sans-serif;font-weight:700;color:var(--amber);}
+
+/* SCOREBOARD */
+.scoreboard{display:flex;flex-direction:column;gap:5px;}
+.score-row{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
+.score-row.rank1{border-color:var(--amber);background:rgba(212,135,10,.05);}
+.score-rank{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;width:28px;text-align:center;flex-shrink:0;}
+.score-rank.r1{color:var(--amber);}
+.score-rank.r2{color:var(--muted2);}
+.score-rank.r3{color:#cd7f32;}
+.score-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.score-name{flex:1;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;}
+.score-pts{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--amber);}
+.score-pts-lbl{font-size:10px;color:var(--muted2);}
+
+/* MR WHITE OVERLAY */
+.overlay{position:fixed;inset:0;background:rgba(245,244,240,.97);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:28px;}
+.overlay.active{display:flex;}
+.overlay h2{font-size:26px;font-weight:800;color:var(--amber);}
+.overlay p{color:var(--muted2);font-size:12px;max-width:260px;line-height:1.6;}
+.overlay input{max-width:280px;text-align:center;font-size:16px;}
+
+/* PROGRESS */
+.prog-wrap{background:var(--border);border-radius:2px;height:3px;}
+.prog-fill{height:3px;background:var(--accent);border-radius:2px;transition:width .4s;}
+
+/* WAITING */
+.waiting{font-size:11px;color:var(--muted2);text-align:center;padding:6px 0;display:flex;align-items:center;justify-content:center;gap:6px;}
+.pulse-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pdot 1.4s infinite;}
+@keyframes pdot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}
+
+/* ERR */
+.err{background:rgba(232,54,93,.08);border:1px solid rgba(232,54,93,.2);color:var(--accent);padding:9px 13px;border-radius:8px;font-size:11px;display:none;}
+.err.show{display:block;}
+
+/* NOTIFY */
+.notify{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);border-radius:10px;padding:9px 18px;font-size:12px;z-index:300;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none;}
+.notify.show{opacity:1;}
+
+/* SECTION */
+.section-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;}
+.section-sub{font-size:11px;color:var(--muted2);margin-bottom:12px;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.anim{animation:fadeUp .3s ease both;}
+
+/* ELIM BADGE */
+.elim-badge{font-size:9px;padding:2px 6px;border-radius:20px;background:rgba(232,54,93,.1);color:var(--accent);}
+
+/* MY ROLE BANNER */
+.my-role-banner{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:12px;}
+.mrb-word{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}
+.mrb-word.civilian{color:var(--teal);}
+.mrb-word.undercover{color:var(--accent);}
+.mrb-word.mrwhite{color:var(--amber);}
+.mrb-badge{font-size:10px;color:var(--muted2);}
+
+@media(max-width:380px){.home-title{font-size:54px;}.g3{grid-template-columns:1fr 1fr;}.preset-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+
+<!-- ══ HOME ══ -->
+<div id="s-home" class="screen active">
+  <div class="anim" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:40px 20px;text-align:center;">
+    <div class="home-title"><span class="d">UNDER</span><br><span class="r">COVER</span></div>
+    <p class="home-sub">Jeu de déduction multijoueur. Trouve l'imposteur avant qu'il ne soit trop tard.</p>
+    <div class="home-actions">
+      <button class="btn btn-p" onclick="showCreate()">Créer un salon</button>
+      <button class="btn btn-g" onclick="showJoin()">Rejoindre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CREATE ══ -->
+<div id="s-create" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="goHome()">← Retour</button></div>
+  <div class="pg">
+    <div class="field"><div class="lbl">Ton pseudo</div><input type="text" id="create-name" placeholder="Ton nom…" maxlength="16"></div>
+    <div class="field">
+      <div class="lbl">Ton avatar</div>
+      <div class="avatar-grid" id="create-avatar-grid"></div>
+    </div>
+    <div class="err" id="create-err"></div>
+    <button class="btn btn-p" onclick="createRoom()">Créer le salon →</button>
+  </div>
+</div>
+
+<!-- ══ JOIN ══ -->
+<div id="s-join" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="goHome()">← Retour</button></div>
+  <div class="pg">
+    <div class="field"><div class="lbl">Ton pseudo</div><input type="text" id="join-name" placeholder="Ton nom…" maxlength="16"></div>
+    <div class="field">
+      <div class="lbl">Ton avatar</div>
+      <div class="avatar-grid" id="join-avatar-grid"></div>
+    </div>
+    <div class="field"><div class="lbl">Code du salon</div><input type="text" id="join-code" placeholder="EX: AB3X" maxlength="4" style="text-transform:uppercase;font-size:22px;text-align:center;letter-spacing:.12em"></div>
+    <div class="err" id="join-err"></div>
+    <button class="btn btn-p" onclick="joinRoom()">Rejoindre →</button>
+  </div>
+</div>
+
+<!-- ══ LOBBY ══ -->
+<div id="s-lobby" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right"><button class="btn btn-g btn-sm" onclick="goHome()">Quitter</button></div></div>
+  <div class="pg">
+    <div class="card">
+      <div class="lbl">Code du salon</div>
+      <div class="room-code" id="lobby-code">----</div>
+      <div class="code-sub">Partage ce code à tes amis</div>
+      <button class="btn btn-g btn-sm" style="width:100%;margin-top:10px" onclick="copyLink()">📋 Copier le lien</button>
+    </div>
+    <div>
+      <div class="lbl">Joueurs (<span id="lobby-count">0</span>)</div>
+      <div class="player-list" id="lobby-players"></div>
+    </div>
+    <div id="host-cfg" style="display:none">
+      <div class="lbl" style="margin-bottom:10px">Configuration</div>
+      <div class="g2" style="margin-bottom:10px">
+        <div class="field"><div class="lbl">Manches</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('numRounds',-1)">−</button><input type="number" id="cfg-rounds" value="3" min="1" max="20" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('numRounds',1)">+</button></div>
+        </div>
+        <div class="field"><div class="lbl">Mots / joueur</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('wordsPerPlayer',-1)">−</button><input type="number" id="cfg-words" value="1" min="1" max="5" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('wordsPerPlayer',1)">+</button></div>
+        </div>
+      </div>
+      <div class="g3" style="margin-bottom:10px">
+        <div class="field"><div class="lbl">Imposteurs</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('numUndercover',-1)">−</button><input type="number" id="cfg-uc" value="1" min="0" max="5" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('numUndercover',1)">+</button></div>
+        </div>
+        <div class="field"><div class="lbl">Mr. White</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('numMrWhite',-1)">−</button><input type="number" id="cfg-mw" value="0" min="0" max="3" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('numMrWhite',1)">+</button></div>
+        </div>
+        <div class="field"><div class="lbl">Civils</div><input type="number" id="cfg-civ" disabled style="text-align:center;"></div>
+      </div>
+      <div class="g2" style="margin-bottom:10px">
+        <div class="field"><div class="lbl">Chrono mot (s)</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('wordTime',-5)">−</button><input type="number" id="cfg-wt" value="30" min="5" max="120" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('wordTime',5)">+</button></div>
+        </div>
+        <div class="field"><div class="lbl">Chrono vote (s)</div>
+          <div class="counter-row"><button class="cnt-btn" onclick="cc('voteTime',-5)">−</button><input type="number" id="cfg-vt" value="30" min="5" max="120" onchange="pushCfg()"><button class="cnt-btn" onclick="cc('voteTime',5)">+</button></div>
+        </div>
+      </div>
+      <div class="toggle-wrap" onclick="toggleHiddenRole()" style="margin-bottom:14px">
+        <div class="toggle-track" id="toggle-hidden"><div class="toggle-thumb"></div></div>
+        <span class="toggle-label">Rôle caché — même l'imposteur ne sait pas qu'il l'est</span>
+      </div>
+
+      <div class="lbl">Listes de mots</div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchWordTab('preset')">Thèmes</button>
+        <button class="tab-btn" onclick="switchWordTab('paste')">Coller</button>
+        <button class="tab-btn" onclick="switchWordTab('manual')">Manuel</button>
+      </div>
+
+      <!-- PRESET TAB -->
+      <div id="word-tab-preset">
+        <div class="preset-grid">
+          <button class="preset-btn" id="preset-animes" onclick="loadPreset('animes')">
+            <span class="preset-icon">⚔️</span>
+            <span class="preset-name">Shonens</span>
+            <span class="preset-count">50 paires</span>
+          </button>
+          <button class="preset-btn" id="preset-lol" onclick="loadPreset('lol')">
+            <span class="preset-icon">🎮</span>
+            <span class="preset-name">League of Legends</span>
+            <span class="preset-count">50 paires</span>
+          </button>
+          <button class="preset-btn" id="preset-rap" onclick="loadPreset('rap')">
+            <span class="preset-icon">🎤</span>
+            <span class="preset-name">Rap Français</span>
+            <span class="preset-count">50 paires</span>
+          </button>
+          <button class="preset-btn" id="preset-foot" onclick="loadPreset('foot')">
+            <span class="preset-icon">⚽</span>
+            <span class="preset-name">Football</span>
+            <span class="preset-count">50 paires</span>
+          </button>
+        </div>
+        <div id="preset-selected-info" style="font-size:11px;color:var(--muted2);text-align:center;padding:4px 0;"></div>
+      </div>
+
+      <!-- PASTE TAB -->
+      <div id="word-tab-paste" style="display:none">
+        <textarea id="paste-words" placeholder="Naruto | Sasuke&#10;One Piece | Fairy Tail&#10;Goku | Vegeta"></textarea>
+        <button class="btn btn-g btn-sm" style="width:100%;margin-top:6px" onclick="parsePaste()">Analyser →</button>
+      </div>
+
+      <!-- MANUAL TAB -->
+      <div id="word-tab-manual" style="display:none">
+        <div class="g2" style="margin-bottom:6px"><input type="text" id="m-civ" placeholder="Mot A"><input type="text" id="m-spy" placeholder="Mot B"></div>
+        <button class="btn btn-g btn-sm" style="width:100%" onclick="addManual()">+ Ajouter</button>
+      </div>
+
+      <div class="pair-preview" id="pair-preview"></div>
+      <div style="font-size:10px;color:var(--muted2);margin-top:4px" id="pair-count"></div>
+      <div class="err" id="lobby-err" style="margin-top:8px"></div>
+      <button class="btn btn-p" style="margin-top:14px;width:100%" onclick="startGame()">🎮 Lancer la partie</button>
+    </div>
+    <div id="guest-wait" style="display:none">
+      <div class="waiting"><span class="pulse-dot"></span> En attente que l'hôte lance…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ WORDS ══ -->
+<div id="s-words" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right"><span style="font-size:10px;color:var(--muted2)" id="words-round-lbl">Manche 1/3</span></div></div>
+  <div class="pg">
+    <!-- Role reminder -->
+    <div class="my-role-banner">
+      <div style="flex:1">
+        <div class="lbl" style="margin-bottom:2px">Ton mot secret</div>
+        <div class="mrb-word" id="words-my-word">—</div>
+      </div>
+      <div class="mrb-badge" id="words-my-badge">—</div>
+    </div>
+
+    <!-- Timer -->
+    <div class="card" style="text-align:center;padding:10px 16px">
+      <div class="lbl">Au tour de <b id="words-cur-name">—</b></div>
+      <div class="timer-num" id="words-timer">30</div>
+      <div class="timer-wrap" style="margin-top:6px"><div class="timer-fill" id="words-timer-bar" style="width:100%;background:var(--teal)"></div></div>
+    </div>
+
+    <!-- Word input -->
+    <div id="words-input-area" style="display:none">
+      <div class="lbl">Donne un indice sur ton mot</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="words-input" placeholder="Ton indice…" maxlength="30" onkeydown="if(event.key==='Enter')submitWord()">
+        <button class="btn btn-p" style="flex-shrink:0;padding:10px 16px" onclick="submitWord()">→</button>
+      </div>
+    </div>
+    <div id="words-wait" style="display:none"><div class="waiting"><span class="pulse-dot"></span> À toi bientôt…</div></div>
+
+    <!-- Players with their words -->
+    <div>
+      <div class="lbl">Joueurs & indices</div>
+      <div class="words-players-grid" id="words-players-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ VOTE ══ -->
+<div id="s-vote" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right"><span style="font-size:10px;color:var(--muted2)" id="vote-round-lbl">Manche 1/3</span></div></div>
+  <div class="pg">
+    <!-- Timer -->
+    <div class="card" style="text-align:center;padding:10px 16px">
+      <div class="lbl">Temps pour voter</div>
+      <div class="timer-num" id="vote-timer">30</div>
+      <div class="timer-wrap" style="margin-top:6px"><div class="timer-fill" id="vote-timer-bar" style="width:100%;background:var(--accent)"></div></div>
+    </div>
+
+    <!-- Vote grid with words -->
+    <div>
+      <div class="lbl">Vote pour éliminer — tu ne peux pas voter pour toi-même</div>
+      <div class="vote-players-grid" id="vote-grid"></div>
+    </div>
+
+    <!-- Vote table -->
+    <div class="vote-table">
+      <div class="vote-table-title">Qui vote pour qui</div>
+      <div id="vote-table-rows"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ROUND RECAP ══ -->
+<div id="s-recap" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right" id="recap-round-lbl" style="font-size:11px;color:var(--muted2)"></div></div>
+  <div class="pg">
+    <div class="recap-header">
+      <div class="recap-winner" id="recap-winner-text">—</div>
+      <div class="recap-pair" id="recap-pair">—</div>
+    </div>
+    <div class="lbl">Scores de la manche</div>
+    <div class="recap-players" id="recap-players"></div>
+    <div id="recap-host-actions" style="display:none">
+      <button class="btn btn-p" style="width:100%;margin-top:6px" id="recap-next-btn" onclick="hostNextRound()">Manche suivante →</button>
+    </div>
+    <div id="recap-guest-wait" style="display:none"><div class="waiting"><span class="pulse-dot"></span> En attente de l'hôte…</div></div>
+  </div>
+</div>
+
+<!-- ══ END ══ -->
+<div id="s-end" class="screen">
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div></div>
+  <div class="pg">
+    <div style="text-align:center;padding:16px 0 8px">
+      <div style="font-size:48px">🏆</div>
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;margin-top:8px">Classement final</div>
+      <div style="font-size:11px;color:var(--muted2);margin-top:4px">Partie terminée</div>
+    </div>
+    <div class="scoreboard" id="final-scoreboard"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+      <button class="btn btn-p" style="flex:1" id="end-restart-btn" onclick="restartGame()">Rejouer</button>
+      <button class="btn btn-g" style="flex:1" onclick="goHome()">Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MR WHITE OVERLAY ══ -->
+<div class="overlay" id="mw-overlay">
+  <div style="font-size:44px">👤</div>
+  <h2>Mr. White éliminé !</h2>
+  <p>Devine le mot des civils pour gagner des points bonus !</p>
+  <input type="text" id="mw-guess" placeholder="Ton mot…" onkeydown="if(event.key==='Enter')sendMwGuess()">
+  <button class="btn btn-p" style="max-width:280px;width:100%" onclick="sendMwGuess()">Valider (+4 pts si correct)</button>
+  <p style="font-size:10px">Mauvaise réponse = fin de manche</p>
+</div>
+
+<div class="notify" id="notify"></div>
+
+<script>
+// ── AVATARS ──────────────────────────────────────────────────────────────────
+const AVATARS = ['🦊','🐺','🐸','🐼','🦁','🐯','🦅','🦋','🐙','🦄','🐲','🤖','👻','🎭','🧙','🥷'];
+const AV_COLORS = ['#f5e6d3','#d3e6d3','#e6d3d3','#d3dce6','#e6d3e6','#e6e6d3','#d3e6e6','#e6d3dc'];
+
+let selectedAvatar = AVATARS[0];
+
+function buildAvatarGrid(containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  AVATARS.forEach((av, i) => {
+    const d = document.createElement('div');
+    d.className = 'av-opt' + (i === 0 ? ' selected' : '');
+    d.textContent = av;
+    d.style.background = AV_COLORS[i % AV_COLORS.length];
+    d.onclick = () => {
+      el.querySelectorAll('.av-opt').forEach(x => x.classList.remove('selected'));
+      d.classList.add('selected');
+      selectedAvatar = av;
+    };
+    el.appendChild(d);
+  });
+}
+buildAvatarGrid('create-avatar-grid');
+buildAvatarGrid('join-avatar-grid');
+
+function avColor(av) { return AV_COLORS[AVATARS.indexOf(av) % AV_COLORS.length] || '#f5e6d3'; }
+function avEl(av, size=32) {
+  const fs = Math.round(size * 0.5);
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${avColor(av)};display:flex;align-items:center;justify-content:center;font-size:${fs}px;flex-shrink:0">${av||'?'}</div>`;
+}
+
+// ── PRESET WORD LISTS ─────────────────────────────────────────────────────────
+const PRESETS = {
+  animes: {
+    name: 'Shonens',
+    pairs: [
+      {civ:'Kamehameha',spy:'Rasengan'},{civ:'Super Saiyan',spy:'Gear Fourth'},
+      {civ:'Fruit du Démon',spy:'Quirk héréditaire'},{civ:'Zanpakuto',spy:'Nichirin'},
+      {civ:'Akatsuki',spy:'Guilde Fantôme'},{civ:'Hinokami Kagura',spy:'Hamon'},
+      {civ:'Tournoi des Arts Martiaux',spy:'Examen Chunin'},{civ:'Skypeia',spy:'Laputa'},
+      {civ:'L',spy:'Conan'},{civ:'Sharingan',spy:'Byakugan'},
+      {civ:'Bankai',spy:'Forme Finale'},{civ:'Titan Colossal',spy:'Nomu'},
+      {civ:'Nen',spy:'Haki'},{civ:'Pierre Philosophale',spy:'Porte de Vérité'},
+      {civ:'Démon Supérieur',spy:'Arrancar'},{civ:'Salle du Temps',spy:'Chambre de Gravité'},
+      {civ:'Vallée de la Fin',spy:'Marineford'},{civ:'Namek',spy:'Île des Hommes-Poissons'},
+      {civ:'Examen Hunter',spy:'Examen Sorcier'},{civ:'Greed Island',spy:'Île Céleste'},
+      {civ:'Cahier de la Mort',spy:'Contrat Démoniaque'},{civ:'Seireitei',spy:'Hueco Mundo'},
+      {civ:'Lune Supérieure',spy:'Espada'},{civ:'Danse du Feu',spy:'Danse de l\'Eau'},
+      {civ:'Clan Uchiha',spy:'Clan Hyuga'},{civ:'Académie des Héros',spy:'Académie des Shinigami'},
+      {civ:'Eau Tranquille',spy:'Tonnerre Constant'},{civ:'Chapeau de Paille',spy:'Manteau de Hokage'},
+      {civ:'Alliance des Pirates',spy:'Alliance des Ninjas'},{civ:'Rival de Toujours',spy:'Nakama'},
+      {civ:'Pilier de l\'Eau',spy:'Pilier du Feu'},{civ:'Flamme Solaire',spy:'Flamme de la Foudre'},
+      {civ:'Prophétie',spy:'Destin Scellé'},{civ:'Entraînement Ultime',spy:'Entraînement de l\'Enfer'},
+      {civ:'Transformation Ultime',spy:'Éveil Final'},{civ:'Portail des Âmes',spy:'Porte de Vérité'},
+      {civ:'Monde des Esprits',spy:'Monde des Morts'},{civ:'Île au Trésor',spy:'Île Interdite'},
+      {civ:'Équipage Légendaire',spy:'Groupe Légendaire'},{civ:'Sensei',spy:'Maître Légendaire'},
+      {civ:'Génie Criminel',spy:'Génie Stratège'},{civ:'Détective Prodige',spy:'Enquêteur de l\'Ombre'},
+      {civ:'Luffy à Marineford',spy:'Résurrection de Sasuke'},{civ:'Alchimie',spy:'Transmutation'},
+      {civ:'Marque Maudite',spy:'Marque du Démon'},{civ:'Rêve Infini',spy:'Monde Idéal'},
+      {civ:'Clan Zoldyck',spy:'Clan Nostrade'},{civ:'Don Héréditaire',spy:'Pouvoir Ancestral'},
+      {civ:'Navigation Céleste',spy:'Navigation des Étoiles'},{civ:'Succession',spy:'Héritage Maudit'},
+    ]
+  },
+  lol: {
+    name: 'League of Legends',
+    pairs: [
+      {civ:'Yasuo',spy:'Yone'},{civ:'Jinx',spy:'Vi'},{civ:'Garen',spy:'Darius'},
+      {civ:'Ahri',spy:'LeBlanc'},{civ:'Zed',spy:'Akali'},{civ:'Lux',spy:'Syndra'},
+      {civ:'Lee Sin',spy:'Vi'},{civ:'Thresh',spy:'Blitzcrank'},{civ:'Ezreal',spy:'Lucian'},
+      {civ:'Vayne',spy:'Caitlyn'},{civ:'Pantheon',spy:'Renekton'},{civ:'Twisted Fate',spy:'Katarina'},
+      {civ:'Irelia',spy:'Fiora'},{civ:'Malphite',spy:'Nautilus'},{civ:'Morgana',spy:'Lux'},
+      {civ:'Kayn',spy:'Ekko'},{civ:'Jinx',spy:'Powder'},{civ:'Demacia',spy:'Noxus'},
+      {civ:'Piltover',spy:'Zaun'},{civ:'Freljord',spy:'Targon'},{civ:'Ionia',spy:'Bilgewater'},
+      {civ:'Fontaine du Soleil',spy:'Oeil du Dragon'},{civ:'Rift Héraut',spy:'Baron Nashor'},
+      {civ:'Dragon Infernal',spy:'Dragon Océanique'},{civ:'Tour de Nexus',spy:'Tour Inhibiteur'},
+      {civ:'Jungle',spy:'Mid lane'},{civ:'Support',spy:'ADC'},{civ:'Top lane',spy:'Jungle'},
+      {civ:'Gank',spy:'Dive'},{civ:'Roam',spy:'Split push'},{civ:'Flash',spy:'Dash'},
+      {civ:'CC',spy:'Burst'},{civ:'Poke',spy:'Harass'},{civ:'Carry',spy:'Feeder'},
+      {civ:'Penta Kill',spy:'Quadra Kill'},{civ:'Smite',spy:'Ignite'},{civ:'Teleport',spy:'Ghost'},
+      {civ:'Gold',spy:'Platine'},{civ:'Diamant',spy:'Master'},{civ:'Challenger',spy:'Grandmaster'},
+      {civ:'LCS',spy:'LEC'},{civ:'Faker',spy:'Caps'},{civ:'T1',spy:'G2 Esports'},
+      {civ:'Rune',spy:'Objet légendaire'},{civ:'Coup Critique',spy:'Coup Mortel'},
+      {civ:'Bouclier',spy:'Barrière'},{civ:'Homeguard',spy:'Rappel'},{civ:'Minion',spy:'Monstre'},
+      {civ:'Rift Scuttler',spy:'Gromp'},{civ:'Loup',spy:'Raptor'},
+    ]
+  },
+  rap: {
+    name: 'Rap Français',
+    pairs: [
+      {civ:'PNL',spy:'Hamza'},{civ:'Ninho',spy:'Niska'},{civ:'Damso',spy:'Nekfeu'},
+      {civ:'SCH',spy:'Jul'},{civ:'Booba',spy:'Kaaris'},{civ:'Rohff',spy:'La Fouine'},
+      {civ:'Lacrim',spy:'Gradur'},{civ:'Freeze Corleone',spy:'Vald'},{civ:'Orelsan',spy:'Bigflo & Oli'},
+      {civ:'Stromae',spy:'Orelsan'},{civ:'Lomepal',spy:'Jazzy Bazz'},{civ:'Sofiane',spy:'Alkpote'},
+      {civ:'Morsay',spy:'Kalash Criminel'},{civ:'Kekra',spy:'Zed Yun Pégaze'},
+      {civ:'Columbine',spy:'Venin'},{civ:'Double H',spy:'Double A'},
+      {civ:'93 Empire',spy:'Paname Underground'},{civ:'QLF',spy:'QG'},
+      {civ:'Banlieue',spy:'Quartier'},{civ:'Cité',spy:'Ghetto'},
+      {civ:'Freestyle',spy:'Punchline'},{civ:'Flow',spy:'Débit'},
+      {civ:'Instru',spy:'Prod'},{civ:'Mix',spy:'Master'},{civ:'Sample',spy:'Loop'},
+      {civ:'Microphone',spy:'Studio'},{civ:'Cypher',spy:'Battle'},
+      {civ:'Rime',spy:'Assonance'},{civ:'Double sens',spy:'Jeu de mots'},
+      {civ:'Platine',spy:'Disque d\'or'},{civ:'Chart',spy:'Classement'},
+      {civ:'Clip',spy:'Vidéo'},{civ:'Tournée',spy:'Concert'},
+      {civ:'Feat',spy:'Collab'},{civ:'Album',spy:'Mixtape'},
+      {civ:'EP',spy:'Maxi'},{civ:'Dropbox',spy:'Soundcloud'},
+      {civ:'Authentique',spy:'Vrai'},{civ:'La rue',spy:'La ville'},
+      {civ:'Ghetto',spy:'Périphérique'},{civ:'Keufs',spy:'Daronne'},
+      {civ:'Oseille',spy:'Thunes'},{civ:'Swag',spy:'Style'},
+      {civ:'Banger',spy:'Tube'},{civ:'Diss',spy:'Clash'},
+      {civ:'Beef',spy:'Guerre de rap'},{civ:'Autotune',spy:'Vocoder'},
+      {civ:'Trap',spy:'Drill'},{civ:'Boom bap',spy:'Cloud rap'},
+      {civ:'Grime',spy:'UK Rap'},
+    ]
+  },
+  foot: {
+    name: 'Football',
+    pairs: [
+      {civ:'PSG',spy:'OM'},{civ:'Real Madrid',spy:'FC Barcelone'},{civ:'Manchester City',spy:'Manchester United'},
+      {civ:'Bayern Munich',spy:'Borussia Dortmund'},{civ:'Juventus',spy:'Inter Milan'},
+      {civ:'Liverpool',spy:'Chelsea'},{civ:'Arsenal',spy:'Tottenham'},
+      {civ:'Mbappe',spy:'Neymar'},{civ:'Haaland',spy:'Vinicius Jr'},
+      {civ:'Ronaldo',spy:'Messi'},{civ:'Zidane',spy:'Platini'},{civ:'Henry',spy:'Anelka'},
+      {civ:'Benzema',spy:'Giroud'},{civ:'Ligue 1',spy:'Ligue 2'},{civ:'Liga',spy:'Serie A'},
+      {civ:'Premier League',spy:'Bundesliga'},{civ:'Ligue des Champions',spy:'Europa League'},
+      {civ:'Ballon d\'Or',spy:'FIFA The Best'},{civ:'Coupe du Monde',spy:'Euro'},
+      {civ:'Coupe de France',spy:'FA Cup'},{civ:'Penalty',spy:'Coup franc'},
+      {civ:'Hors-jeu',spy:'Faute'},{civ:'Carton rouge',spy:'Carton jaune'},
+      {civ:'Gardien',spy:'Libero'},{civ:'Latéral',spy:'Ailier'},
+      {civ:'Milieu défensif',spy:'Milieu offensif'},{civ:'Avant-centre',spy:'Faux neuf'},
+      {civ:'Pressing',spy:'Contre-pressing'},{civ:'Tiki-taka',spy:'Catenaccio'},
+      {civ:'Contre-attaque',spy:'Jeu direct'},{civ:'Corner',spy:'Coup franc indirect'},
+      {civ:'Touche',spy:'Coup d\'envoi'},{civ:'Prolongation',spy:'Tirs au but'},
+      {civ:'Panenka',spy:'Trivela'},{civ:'Bicyclette',spy:'Ciseau retourné'},
+      {civ:'Ciseau',spy:'Volée'},{civ:'Dribble',spy:'Crochet'},
+      {civ:'Petit pont',spy:'Grand pont'},{civ:'Roulette',spy:'Sombrero'},
+      {civ:'Stade de France',spy:'Vélodrome'},{civ:'Santiago Bernabeu',spy:'Camp Nou'},
+      {civ:'Old Trafford',spy:'Anfield'},{civ:'Allianz Arena',spy:'Signal Iduna Park'},
+      {civ:'Transfert',spy:'Prêt'},{civ:'Agent',spy:'Directeur sportif'},
+      {civ:'Mercato',spy:'Draft'},{civ:'Salaire',spy:'Prime'},
+      {civ:'Capitaine',spy:'Vice-capitaine'},{civ:'Brassard',spy:'Maillot'},
+    ]
+  }
+};
+
+// ── SOCKET & STATE ────────────────────────────────────────────────────────────
+const socket = io();
+let myId = null, myCode = null, myName = null;
+let myRole = null, myTrueRole = null, myWord = null;
+let gameState = null;
+let localPairs = [];
+let myVote = null;
+let hiddenRoleEnabled = false;
+let wordTimerMax = 30, voteTimerMax = 30;
+let activePreset = null;
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function goTo(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+function goHome() { myId=null;myCode=null;myRole=null;myWord=null;myVote=null; goTo('s-home'); }
+function showCreate() { goTo('s-create'); }
+function showJoin() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('code')) document.getElementById('join-code').value = p.get('code').toUpperCase();
+  goTo('s-join');
+}
+
+// ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
+socket.on('room_joined', ({ code, playerId }) => {
+  myId = playerId; myCode = code;
+  document.getElementById('lobby-code').textContent = code;
+  goTo('s-lobby');
+});
+
+socket.on('game_state', (s) => {
+  gameState = s;
+  renderState(s);
+});
+
+socket.on('your_role', ({ role, trueRole, word }) => {
+  myRole = role; myTrueRole = trueRole; myWord = word;
+});
+
+socket.on('mrwhite_turn', () => {
+  document.getElementById('mw-overlay').classList.add('active');
+  document.getElementById('mw-guess').focus();
+});
+
+socket.on('timer_tick', ({ time }) => {
+  updateTimerUI(time);
+});
+
+socket.on('error', (msg) => notify(msg));
+
+// ── RENDER STATE ──────────────────────────────────────────────────────────────
+function renderState(s) {
+  const me = s.players.find(p => p.id === myId);
+  const isHost = s.host === myId;
+  const screen = document.querySelector('.screen.active')?.id;
+
+  if (s.phase === 'lobby') { renderLobby(s, me, isHost); if (screen !== 's-lobby') goTo('s-lobby'); }
+  else if (s.phase === 'words') { renderWords(s, me, isHost); if (screen !== 's-words') goTo('s-words'); }
+  else if (s.phase === 'vote') { renderVote(s, me, isHost); if (screen !== 's-vote') goTo('s-vote'); }
+  else if (s.phase === 'mrwhite_guess') {
+    renderVote(s, me, isHost);
+    if (screen !== 's-vote') goTo('s-vote');
+  }
+  else if (s.phase === 'round_recap') { renderRecap(s, me, isHost); if (screen !== 's-recap') goTo('s-recap'); }
+  else if (s.phase === 'end') { renderEnd(s); if (screen !== 's-end') goTo('s-end'); }
+}
+
+// ── LOBBY ─────────────────────────────────────────────────────────────────────
+function renderLobby(s, me, isHost) {
+  document.getElementById('lobby-count').textContent = s.players.length;
+  document.getElementById('lobby-players').innerHTML = s.players.map(p =>
+    `<div class="player-item">
+      ${avEl(p.avatar, 32)}
+      <div class="p-name">${esc(p.name)}</div>
+      ${p.id === s.host ? '<span class="p-tag tag-host">Hôte</span>' : ''}
+      ${p.id === myId ? '<span class="p-tag tag-you">Toi</span>' : ''}
+      <div class="p-dot ${p.connected ? '' : 'off'}"></div>
+    </div>`).join('');
+  document.getElementById('host-cfg').style.display = isHost ? '' : 'none';
+  document.getElementById('guest-wait').style.display = isHost ? 'none' : '';
+  if (isHost) {
+    const c = s.config;
+    document.getElementById('cfg-rounds').value = c.numRounds;
+    document.getElementById('cfg-words').value = c.wordsPerPlayer;
+    document.getElementById('cfg-uc').value = c.numUndercover;
+    document.getElementById('cfg-mw').value = c.numMrWhite;
+    document.getElementById('cfg-wt').value = c.wordTime;
+    document.getElementById('cfg-vt').value = c.voteTime;
+    document.getElementById('cfg-civ').value = s.players.length - c.numUndercover - c.numMrWhite;
+    const tog = document.getElementById('toggle-hidden');
+    hiddenRoleEnabled = c.hiddenRole;
+    tog.classList.toggle('on', c.hiddenRole);
+  }
+}
+
+// ── WORDS PHASE ───────────────────────────────────────────────────────────────
+function renderWords(s, me, isHost) {
+  document.getElementById('words-round-lbl').textContent = `Manche ${s.currentRound}/${s.totalRounds}`;
+  wordTimerMax = s.config.wordTime;
+
+  const mw = document.getElementById('words-my-word');
+  const mb = document.getElementById('words-my-badge');
+  if (myTrueRole === 'mrwhite') {
+    mw.textContent = '???'; mw.className = 'mrb-word mrwhite';
+    mb.textContent = '⚪ Mr. White';
+  } else if (s.config.hiddenRole) {
+    mw.textContent = myWord || '???'; mw.className = 'mrb-word';
+    mb.textContent = '🎭 Rôle masqué';
+  } else {
+    mw.textContent = myWord || '—'; mw.className = `mrb-word ${myTrueRole || ''}`;
+    mb.textContent = myTrueRole === 'civilian' ? '🟢 Civil' : '🔴 Undercover';
+  }
+
+  const curPlayer = s.players.find(p => p.id === s.currentWordPlayer);
+  document.getElementById('words-cur-name').textContent = curPlayer ? curPlayer.name : '—';
+
+  const isMyTurn = s.currentWordPlayer === myId;
+  document.getElementById('words-input-area').style.display = isMyTurn && me && !me.eliminated ? '' : 'none';
+  document.getElementById('words-wait').style.display = isMyTurn ? 'none' : '';
+  if (isMyTurn) document.getElementById('words-input').focus();
+
+  // Players grid with words below avatars
+  const grid = document.getElementById('words-players-grid');
+  grid.innerHTML = s.players.map(p => {
+    const isActive = p.id === s.currentWordPlayer;
+    const playerWords = (s.allWordsGiven || []).find(x => x.id === p.id);
+    const words = playerWords ? playerWords.words : p.wordsGiven || [];
+    return `<div class="word-player-card ${isActive ? 'active-turn' : ''} ${p.eliminated ? 'eliminated' : ''}">
+      <div class="wpc-av" style="background:${avColor(p.avatar)}">${p.avatar}</div>
+      <div class="wpc-name">${esc(p.name)}</div>
+      <div class="wpc-words">
+        ${words.length ? words.map(w => `<div class="wpc-word">${esc(w)}</div>`).join('') : '<div class="wpc-word" style="opacity:.4">—</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function submitWord() {
+  const w = document.getElementById('words-input').value.trim();
+  if (!w) return;
+  socket.emit('give_word', { code: myCode, word: w });
+  document.getElementById('words-input').value = '';
+}
+
+// ── VOTE ──────────────────────────────────────────────────────────────────────
+function renderVote(s, me, isHost) {
+  document.getElementById('vote-round-lbl').textContent = `Manche ${s.currentRound}/${s.totalRounds}`;
+  voteTimerMax = s.config.voteTime;
+
+  const iAmElim = me && me.eliminated;
+  const grid = document.getElementById('vote-grid');
+
+  grid.innerHTML = s.players.map(p => {
+    const elim = p.eliminated;
+    const iVotedThis = myVote === p.id;
+    const isMe = p.id === myId;
+    const roleColor = p.role === 'civilian' ? 'var(--teal)' : p.role === 'undercover' ? 'var(--accent)' : p.role === 'mrwhite' ? 'var(--amber)' : '';
+    const playerWords = (s.allWordsGiven || []).find(x => x.id === p.id);
+    const words = playerWords ? playerWords.words : p.wordsGiven || [];
+
+    return `<div class="vote-player-card ${elim ? 'eliminated' : ''} ${iVotedThis ? 'voted-by-me' : ''} ${isMe ? 'is-me' : ''}">
+      ${avEl(p.avatar, 40)}
+      <div class="vpc-name">${esc(p.name)}${isMe ? ' (toi)' : ''}</div>
+      <div class="vpc-words">
+        ${words.length ? words.map(w => `<div class="vpc-word">${esc(w)}</div>`).join('') : '<div class="vpc-word" style="opacity:.4">—</div>'}
+      </div>
+      ${elim && p.role ? `<div style="font-size:10px;color:${roleColor};margin-bottom:4px">${roleLabel(p.role)}</div>` : ''}
+      ${!elim && !isMe ? `<button class="vpc-vote-btn ${iVotedThis ? 'active' : ''}" ${(iAmElim || myVote) ? 'disabled' : ''} onclick="castVote('${p.id}')">
+        ${iVotedThis ? '✓ Voté' : 'Voter'}
+      </button>` : (!elim && isMe ? '<div style="font-size:9px;color:var(--muted2);padding-top:2px">Pas toi</div>' : '<div class="elim-badge">Éliminé</div>')}
+    </div>`;
+  }).join('');
+
+  const tableEl = document.getElementById('vote-table-rows');
+  tableEl.innerHTML = s.players.filter(p => !p.eliminated).map(p => {
+    const targetId = s.voteRevealed ? s.voteRevealed[p.id] : null;
+    const target = targetId ? s.players.find(x => x.id === targetId) : null;
+    return `<div class="vote-row">
+      <div class="vr-voter">
+        ${avEl(p.avatar, 24)}
+        <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</span>
+      </div>
+      <div class="vr-arrow">→</div>
+      <div class="vr-target">
+        ${target ? avEl(target.avatar, 24) + `<span style="font-size:11px">${esc(target.name)}</span>` : '<span class="vr-waiting">…</span>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function castVote(targetId) {
+  if (myVote) return;
+  if (targetId === myId) return;
+  myVote = targetId;
+  socket.emit('vote', { code: myCode, targetId });
+}
+
+// ── ROUND RECAP ───────────────────────────────────────────────────────────────
+function renderRecap(s, me, isHost) {
+  const r = s.roundRecap;
+  if (!r) return;
+  const winTexts = { civilian:'🟢 Les Civils gagnent !', undercover:'🔴 L\'Undercover gagne !', mrwhite:'⚪ Mr. White gagne !' };
+  const winCls = { civilian:'civilian', undercover:'undercover', mrwhite:'mrwhite' };
+  const el = document.getElementById('recap-winner-text');
+  el.textContent = winTexts[r.winner] || '—';
+  el.className = `recap-winner ${winCls[r.winner] || ''}`;
+  document.getElementById('recap-round-lbl').textContent = `Manche ${r.round}/${s.totalRounds}`;
+  if (r.chosenPair) {
+    document.getElementById('recap-pair').innerHTML = `Mot civil : <b>${esc(r.chosenPair.civ)}</b> — Mot undercover : <b>${esc(r.chosenPair.spy)}</b>`;
+  }
+
+  const sorted = [...r.players].sort((a,b) => b.score - a.score);
+  document.getElementById('recap-players').innerHTML = sorted.map(p => {
+    const roleColor = p.role === 'civilian' ? 'var(--teal)' : p.role === 'undercover' ? 'var(--accent)' : 'var(--amber)';
+    return `<div class="recap-player">
+      ${avEl(p.avatar, 30)}
+      <div class="rp-name">${esc(p.name)}</div>
+      <div class="rp-role" style="color:${roleColor}">${roleLabel(p.role)}</div>
+      <div class="rp-score">${p.score} pts</div>
+    </div>`;
+  }).join('');
+
+  const isLast = s.currentRound >= s.totalRounds;
+  document.getElementById('recap-host-actions').style.display = isHost ? '' : 'none';
+  document.getElementById('recap-guest-wait').style.display = isHost ? 'none' : '';
+  if (isHost) {
+    document.getElementById('recap-next-btn').textContent = isLast ? '🏆 Voir le classement final' : 'Manche suivante →';
+  }
+  myVote = null;
+}
+
+function hostNextRound() { socket.emit('next_round', { code: myCode }); }
+
+// ── END ───────────────────────────────────────────────────────────────────────
+function renderEnd(s) {
+  const sb = document.getElementById('final-scoreboard');
+  const rankSymbols = ['🥇','🥈','🥉'];
+  sb.innerHTML = (s.finalScores || []).map((p, i) => `
+    <div class="score-row ${i===0?'rank1':''}">
+      <div class="score-rank ${i<3?'r'+(i+1):''}'">${rankSymbols[i] || (i+1)}</div>
+      ${avEl(p.avatar, 36)}
+      <div class="score-name">${esc(p.name)}</div>
+      <div style="text-align:right">
+        <div class="score-pts">${p.score}</div>
+        <div class="score-pts-lbl">points</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('end-restart-btn').style.display = s.host === myId ? '' : 'none';
+}
+
+function restartGame() { socket.emit('restart', { code: myCode }); }
+
+// ── TIMER UI ──────────────────────────────────────────────────────────────────
+function updateTimerUI(time) {
+  const s = gameState;
+  if (!s) return;
+  if (s.phase === 'words') {
+    const pct = (time / wordTimerMax) * 100;
+    document.getElementById('words-timer').textContent = time;
+    document.getElementById('words-timer').className = 'timer-num' + (time <= 5 ? ' urgent' : '');
+    const bar = document.getElementById('words-timer-bar');
+    bar.style.width = pct + '%';
+    bar.style.background = time <= 5 ? 'var(--accent)' : 'var(--teal)';
+  } else if (s.phase === 'vote') {
+    const pct = (time / voteTimerMax) * 100;
+    document.getElementById('vote-timer').textContent = time;
+    document.getElementById('vote-timer').className = 'timer-num' + (time <= 5 ? ' urgent' : '');
+    const bar = document.getElementById('vote-timer-bar');
+    bar.style.width = pct + '%';
+    bar.style.background = time <= 5 ? 'var(--amber)' : 'var(--accent)';
+  }
+}
+
+// ── MR WHITE ─────────────────────────────────────────────────────────────────
+function sendMwGuess() {
+  const g = document.getElementById('mw-guess').value.trim();
+  if (!g) return;
+  socket.emit('mrwhite_guess', { code: myCode, guess: g });
+  document.getElementById('mw-overlay').classList.remove('active');
+}
+
+// ── CREATE / JOIN ─────────────────────────────────────────────────────────────
+function createRoom() {
+  myName = document.getElementById('create-name').value.trim();
+  if (!myName) return showErr('create-err', 'Entre ton pseudo.');
+  socket.emit('create_room', { name: myName, avatar: selectedAvatar });
+}
+function joinRoom() {
+  myName = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!myName) return showErr('join-err', 'Entre ton pseudo.');
+  if (code.length < 4) return showErr('join-err', 'Code à 4 lettres requis.');
+  socket.emit('join_room', { code, name: myName, avatar: selectedAvatar });
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const CFG_MAP = { numRounds:'cfg-rounds', wordsPerPlayer:'cfg-words', numUndercover:'cfg-uc', numMrWhite:'cfg-mw', wordTime:'cfg-wt', voteTime:'cfg-vt' };
+const CFG_MIN = { numRounds:1, wordsPerPlayer:1, numUndercover:0, numMrWhite:0, wordTime:5, voteTime:5 };
+const CFG_MAX = { numRounds:20, wordsPerPlayer:5, numUndercover:5, numMrWhite:3, wordTime:120, voteTime:120 };
+const CFG_STEP = { wordTime:5, voteTime:5 };
+
+function cc(field, delta) {
+  const el = document.getElementById(CFG_MAP[field]);
+  const step = CFG_STEP[field] || 1;
+  el.value = Math.min(CFG_MAX[field], Math.max(CFG_MIN[field], parseInt(el.value||0) + delta * step));
+  pushCfg();
+}
+function pushCfg() {
+  const cfg = {};
+  Object.entries(CFG_MAP).forEach(([k,id]) => { cfg[k] = parseInt(document.getElementById(id).value)||0; });
+  cfg.hiddenRole = hiddenRoleEnabled;
+  socket.emit('update_config', { code: myCode, config: cfg });
+}
+function toggleHiddenRole() {
+  hiddenRoleEnabled = !hiddenRoleEnabled;
+  document.getElementById('toggle-hidden').classList.toggle('on', hiddenRoleEnabled);
+  pushCfg();
+}
+
+// ── WORD TABS ─────────────────────────────────────────────────────────────────
+function switchWordTab(tab) {
+  const tabs = ['preset','paste','manual'];
+  tabs.forEach((t, i) => {
+    document.querySelectorAll('.tabs .tab-btn')[i].classList.toggle('active', t === tab);
+    document.getElementById(`word-tab-${t}`).style.display = t === tab ? '' : 'none';
+  });
+}
+
+// ── PRESETS ───────────────────────────────────────────────────────────────────
+function loadPreset(key) {
+  const preset = PRESETS[key];
+  if (!preset) return;
+  activePreset = key;
+  localPairs = [...preset.pairs];
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`preset-${key}`).classList.add('active');
+  document.getElementById('preset-selected-info').textContent = `✓ ${preset.name} chargé — ${localPairs.length} paires`;
+  socket.emit('set_word_pairs', { code: myCode, pairs: localPairs });
+  notify(`${preset.name} chargé !`);
+}
+
+// ── CUSTOM WORDS ──────────────────────────────────────────────────────────────
+function parsePaste() {
+  const raw = document.getElementById('paste-words').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l);
+  localPairs = [];
+  for (const line of lines) {
+    const sep = line.match(/[|,;–\-]/);
+    if (sep) {
+      const parts = line.split(sep[0]).map(p=>p.trim()).filter(p=>p);
+      if (parts.length >= 2) localPairs.push({ civ:parts[0], spy:parts[1] });
+      else if (parts.length === 1) localPairs.push({ civ:parts[0], spy:parts[0] });
+    } else { localPairs.push({ civ:line, spy:line }); }
+  }
+  socket.emit('set_word_pairs', { code:myCode, pairs:localPairs });
+  renderPairPreview();
+}
+function addManual() {
+  const civ = document.getElementById('m-civ').value.trim();
+  const spy = document.getElementById('m-spy').value.trim();
+  if (!civ||!spy) return notify('Remplis les deux mots.');
+  localPairs.push({ civ, spy });
+  document.getElementById('m-civ').value = '';
+  document.getElementById('m-spy').value = '';
+  socket.emit('set_word_pairs', { code:myCode, pairs:localPairs });
+  renderPairPreview();
+}
+function renderPairPreview() {
+  document.getElementById('pair-preview').innerHTML = localPairs.slice(0,8).map(p =>
+    `<div class="pair-item"><span class="pair-civ">${esc(p.civ)}</span><span class="pair-sep">|</span><span class="pair-spy">${esc(p.spy)}</span></div>`
+  ).join('');
+  document.getElementById('pair-count').textContent = localPairs.length > 0 ? `${localPairs.length} paire(s)` : '';
+}
+
+function startGame() {
+  hideErr('lobby-err');
+  const n = gameState ? gameState.players.length : 0;
+  const uc = parseInt(document.getElementById('cfg-uc').value)||0;
+  const mw = parseInt(document.getElementById('cfg-mw').value)||0;
+  if (n - uc - mw < 1) return showErr('lobby-err','Pas assez de civils.');
+  if (localPairs.length === 0) return showErr('lobby-err','Sélectionne ou ajoute des paires de mots.');
+  socket.emit('start_game', { code: myCode });
+}
+
+// ── COPY LINK ─────────────────────────────────────────────────────────────────
+function copyLink() {
+  const url = `${location.origin}?code=${myCode}`;
+  navigator.clipboard.writeText(url).then(() => notify('Lien copié !'));
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function roleLabel(r) {
+  if (r==='civilian') return '🟢 Civil';
+  if (r==='undercover') return '🔴 Undercover';
+  if (r==='mrwhite') return '⚪ Mr. White';
+  return '—';
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showErr(id,msg) { const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
+function hideErr(id) { document.getElementById(id).classList.remove('show'); }
+let _nt;
+function notify(msg) {
+  const e=document.getElementById('notify'); e.textContent=msg; e.classList.add('show');
+  clearTimeout(_nt); _nt=setTimeout(()=>e.classList.remove('show'),3000);
+}
+
+window.addEventListener('load', () => {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('code')) showJoin();
+});
+</script>
+</body>
+</html>
