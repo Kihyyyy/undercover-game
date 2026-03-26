@@ -63,7 +63,6 @@ function publicState(room) {
     finalScores: room.finalScores,
     phase_timer: room.phase_timer,
     wordPlayerIndex: room.wordPlayerIndex,
-    wordsGivenThisRound: room.wordsGivenThisRound,
     mrWhiteId: room.mrWhiteId,
     chosenPair: room.phase === 'end' || room.phase === 'round_recap' ? room.chosenPair : null,
     allWordsGiven: room.players.map(p => ({ id: p.id, words: p.wordsGiven })),
@@ -71,8 +70,6 @@ function publicState(room) {
 }
 
 function clearTimers(room) {
-  if (room._wordTimer) { clearTimeout(room._wordTimer); room._wordTimer = null; }
-  if (room._voteTimer) { clearTimeout(room._voteTimer); room._voteTimer = null; }
   if (room._tickInterval) { clearInterval(room._tickInterval); room._tickInterval = null; }
 }
 
@@ -80,6 +77,8 @@ function startTick(room, duration, onEnd) {
   clearTimers(room);
   room.phase_timer = duration;
   room._tickInterval = setInterval(() => {
+    // Safety: if room was deleted or phase changed unexpectedly, stop
+    if (!rooms[room.code]) { clearInterval(room._tickInterval); room._tickInterval = null; return; }
     room.phase_timer--;
     io.to(room.code).emit('timer_tick', { time: room.phase_timer });
     if (room.phase_timer <= 0) {
@@ -101,7 +100,6 @@ function assignRoles(room) {
   ];
   roles = shuffle(roles);
   const pair = room.wordPairs[Math.floor(Math.random() * room.wordPairs.length)];
-  // Randomly swap civ/spy words
   const flip = Math.random() < 0.5;
   room.chosenPair = flip ? { civ: pair.spy, spy: pair.civ } : { civ: pair.civ, spy: pair.spy };
   room.players = shuffle(room.players);
@@ -125,22 +123,43 @@ function sendPrivateRoles(room) {
   });
 }
 
+// Returns connected + non-eliminated players
+function aliveConnected(room) {
+  return room.players.filter(p => !p.eliminated && p.connected);
+}
+function alive(room) {
+  return room.players.filter(p => !p.eliminated);
+}
+
 function startWordPhase(room) {
   room.phase = 'words';
   room.wordPlayerIndex = 0;
-  room.wordsGivenThisRound = {};
   room.players.forEach(p => { p.wordsGiven = []; });
   advanceWordPlayer(room);
 }
 
 function advanceWordPlayer(room) {
-  const alive = room.players.filter(p => !p.eliminated);
-  if (room.wordPlayerIndex >= alive.length * room.config.wordsPerPlayer) {
+  // Only consider connected alive players for turn order
+  const alivePlayers = alive(room);
+  const totalTurns = alivePlayers.length * room.config.wordsPerPlayer;
+
+  if (room.wordPlayerIndex >= totalTurns) {
     startVotePhase(room);
     return;
   }
-  const playerIdx = room.wordPlayerIndex % alive.length;
-  room.currentWordPlayer = alive[playerIdx].id;
+
+  const playerIdx = room.wordPlayerIndex % alivePlayers.length;
+  const currentPlayer = alivePlayers[playerIdx];
+
+  // Skip disconnected players automatically
+  if (!currentPlayer.connected) {
+    room.logs.push(`${currentPlayer.name} est déconnecté, tour passé.`);
+    room.wordPlayerIndex++;
+    advanceWordPlayer(room);
+    return;
+  }
+
+  room.currentWordPlayer = currentPlayer.id;
   io.to(room.code).emit('game_state', publicState(room));
   startTick(room, room.config.wordTime, () => {
     room.wordPlayerIndex++;
@@ -159,20 +178,39 @@ function startVotePhase(room) {
   });
 }
 
+// Check if all connected alive players have voted → auto-tally
+function checkAllVoted(room) {
+  const connectedAlive = alive(room).filter(p => p.connected);
+  const voted = connectedAlive.filter(p => room.votes[p.id]);
+  if (voted.length >= connectedAlive.length && connectedAlive.length > 0) {
+    clearTimers(room);
+    tallyVotes(room);
+  }
+}
+
 function tallyVotes(room) {
   clearTimers(room);
-  const alive = room.players.filter(p => !p.eliminated);
+  const alivePlayers = alive(room);
+  if (alivePlayers.length === 0) { endRoundAfterVote(room); return; }
+
   const tally = {};
-  alive.forEach(p => { tally[p.id] = 0; });
+  alivePlayers.forEach(p => { tally[p.id] = 0; });
   Object.values(room.votes).forEach(tid => { if (tally[tid] !== undefined) tally[tid]++; });
 
-  const maxVotes = Math.max(...Object.values(tally), 0);
+  // If nobody voted, pick a random alive player
+  const totalVotes = Object.values(tally).reduce((a, b) => a + b, 0);
+  if (totalVotes === 0) {
+    const randomTarget = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+    tally[randomTarget.id] = 1;
+  }
+
+  const maxVotes = Math.max(...Object.values(tally));
   const candidates = Object.entries(tally).filter(([, v]) => v === maxVotes).map(([k]) => k);
   const eliminatedId = candidates[Math.floor(Math.random() * candidates.length)];
   const target = room.players.find(p => p.id === eliminatedId);
 
   const undercoverIds = room.players.filter(p => p.role === 'undercover' || p.role === 'mrwhite').map(p => p.id);
-  const unanimousVote = Object.values(room.votes).every(v => v === eliminatedId);
+  const unanimousVote = Object.values(room.votes).length > 0 && Object.values(room.votes).every(v => v === eliminatedId);
 
   Object.entries(room.votes).forEach(([voterId, targetId]) => {
     const voter = room.players.find(p => p.id === voterId);
@@ -184,9 +222,7 @@ function tallyVotes(room) {
   });
 
   room.players.filter(p => p.role === 'undercover' || p.role === 'mrwhite').forEach(p => {
-    if (!p.eliminated && p.id !== eliminatedId) {
-      p.score += 3;
-    }
+    if (!p.eliminated && p.id !== eliminatedId) p.score += 3;
   });
 
   if (target) {
@@ -199,21 +235,36 @@ function tallyVotes(room) {
       room.phase = 'mrwhite_guess';
       clearTimers(room);
       io.to(room.code).emit('game_state', publicState(room));
+      // If Mr. White is disconnected, skip guess
       const s = io.sockets.sockets.get(target.id);
-      if (s) s.emit('mrwhite_turn');
+      if (s) {
+        s.emit('mrwhite_turn');
+        // Auto-resolve after 30s if no answer
+        room._mrwhiteTimeout = setTimeout(() => {
+          if (room.phase === 'mrwhite_guess') {
+            room.logs.push(`Mr. White n'a pas répondu à temps.`);
+            endRoundAfterVote(room);
+            io.to(room.code).emit('game_state', publicState(room));
+          }
+        }, 30000);
+      } else {
+        room.logs.push(`Mr. White est déconnecté, pas de devinette.`);
+        endRoundAfterVote(room);
+        io.to(room.code).emit('game_state', publicState(room));
+      }
       return;
     }
   }
 
-  // Always end round after one vote
   endRoundAfterVote(room);
 }
 
 function endRoundAfterVote(room) {
-  const alive = room.players.filter(p => !p.eliminated);
-  const aliveUnder = alive.filter(p => p.role === 'undercover');
-  const aliveWhite = alive.filter(p => p.role === 'mrwhite');
-  const aliveCiv = alive.filter(p => p.role === 'civilian');
+  if (room._mrwhiteTimeout) { clearTimeout(room._mrwhiteTimeout); room._mrwhiteTimeout = null; }
+  const alivePlayers = alive(room);
+  const aliveUnder = alivePlayers.filter(p => p.role === 'undercover');
+  const aliveWhite = alivePlayers.filter(p => p.role === 'mrwhite');
+  const aliveCiv = alivePlayers.filter(p => p.role === 'civilian');
 
   let roundWinner;
   if (aliveUnder.length === 0 && aliveWhite.length === 0) {
@@ -255,10 +306,39 @@ function nextRound(room) {
 }
 
 function endGame(room) {
+  clearTimers(room);
   room.phase = 'end';
   const sorted = [...room.players].sort((a, b) => b.score - a.score);
   room.finalScores = sorted.map((p, i) => ({ rank: i + 1, id: p.id, name: p.name, avatar: p.avatar, score: p.score, role: p.role }));
   io.to(room.code).emit('game_state', publicState(room));
+}
+
+// Reassign host to another connected player if current host left
+function reassignHost(room) {
+  const connected = room.players.filter(p => p.connected);
+  if (connected.length > 0 && !connected.find(p => p.id === room.host)) {
+    room.host = connected[0].id;
+    room.logs.push(`${connected[0].name} est maintenant l'hôte.`);
+  }
+}
+
+// Full reset of a room back to lobby, keeping connected players
+function resetRoomToLobby(room) {
+  clearTimers(room);
+  if (room._mrwhiteTimeout) { clearTimeout(room._mrwhiteTimeout); room._mrwhiteTimeout = null; }
+  room.phase = 'lobby';
+  // Remove disconnected players on restart
+  room.players = room.players.filter(p => p.connected);
+  room.players.forEach(p => {
+    p.role = null; p.word = null; p.eliminated = false;
+    p.roleRevealed = false; p.wordsGiven = []; p.score = 0;
+  });
+  room.currentRound = 1;
+  room.votes = {}; room.voteRevealed = {}; room.logs = [];
+  room.roundRecap = null; room.finalScores = null;
+  room.currentWordPlayer = null; room.wordPlayerIndex = 0;
+  room.mrWhiteId = null; room.phase_timer = 0;
+  reassignHost(room);
 }
 
 io.on('connection', (socket) => {
@@ -269,12 +349,12 @@ io.on('connection', (socket) => {
       code, phase: 'lobby', host: socket.id,
       players: [], config: defaultConfig(),
       wordPairs: [], chosenPair: null,
-      currentRound: 1, distributeIndex: 0,
+      currentRound: 1,
       currentWordPlayer: null, wordPlayerIndex: 0,
-      wordsGivenThisRound: {}, votes: {}, voteRevealed: {},
+      votes: {}, voteRevealed: {},
       logs: [], roundRecap: null, finalScores: null,
       phase_timer: 0, mrWhiteId: null,
-      _wordTimer: null, _voteTimer: null, _tickInterval: null,
+      _tickInterval: null, _mrwhiteTimeout: null,
     };
     socket.join(code);
     rooms[code].players.push({ id: socket.id, name, avatar, eliminated: false, connected: true, role: null, word: null, roleRevealed: false, wordsGiven: [], score: 0 });
@@ -287,12 +367,15 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('error', 'Salon introuvable.');
     if (room.phase !== 'lobby') return socket.emit('error', 'La partie a déjà commencé.');
     if (room.players.length >= 20) return socket.emit('error', 'Salon plein.');
+    // Prevent duplicate names
+    if (room.players.find(p => p.name === name && p.connected)) return socket.emit('error', 'Ce pseudo est déjà utilisé.');
     socket.join(code);
     room.players.push({ id: socket.id, name, avatar, eliminated: false, connected: true, role: null, word: null, roleRevealed: false, wordsGiven: [], score: 0 });
     socket.emit('room_joined', { code, playerId: socket.id });
     io.to(code).emit('game_state', publicState(room));
   });
 
+  // Rejoin mid-game (page refresh)
   socket.on('rejoin_room', ({ code, name, avatar }) => {
     const room = rooms[code];
     if (!room) return socket.emit('error', 'Salon introuvable.');
@@ -301,6 +384,10 @@ io.on('connection', (socket) => {
       existing.id = socket.id;
       existing.connected = true;
       if (avatar) existing.avatar = avatar;
+      // If this player was the host, update host id
+      if (room.host === existing.id || !room.players.find(p => p.id === room.host && p.connected)) {
+        room.host = socket.id;
+      }
     } else {
       if (room.phase !== 'lobby') return socket.emit('error', 'Partie déjà commencée.');
       room.players.push({ id: socket.id, name, avatar, eliminated: false, connected: true, role: null, word: null, roleRevealed: false, wordsGiven: [], score: 0 });
@@ -332,10 +419,13 @@ io.on('connection', (socket) => {
   socket.on('start_game', ({ code }) => {
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
-    const n = room.players.length;
+    const connectedPlayers = room.players.filter(p => p.connected);
+    const n = connectedPlayers.length;
     const { numUndercover, numMrWhite } = room.config;
     if (n - numUndercover - numMrWhite < 1) return socket.emit('error', 'Pas assez de civils.');
     if (room.wordPairs.length === 0) return socket.emit('error', 'Aucune paire de mots.');
+    // Only keep connected players for the game
+    room.players = connectedPlayers;
     room.players.forEach(p => { p.score = 0; });
     room.currentRound = 1;
     room.logs = [];
@@ -361,21 +451,20 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'vote') return;
     const voter = room.players.find(p => p.id === socket.id);
     if (!voter || voter.eliminated) return;
-    if (targetId === socket.id) return; // Cannot vote for yourself
+    if (targetId === socket.id) return;
+    // Don't allow changing vote
+    if (room.votes[socket.id]) return;
     room.votes[socket.id] = targetId;
     room.voteRevealed[socket.id] = targetId;
     io.to(code).emit('game_state', publicState(room));
-    const alive = room.players.filter(p => !p.eliminated);
-    if (Object.keys(room.votes).length >= alive.length) {
-      clearTimers(room);
-      tallyVotes(room);
-    }
+    checkAllVoted(room);
   });
 
   socket.on('mrwhite_guess', ({ code, guess }) => {
     const room = rooms[code];
     if (!room || room.phase !== 'mrwhite_guess') return;
     if (socket.id !== room.mrWhiteId) return;
+    if (room._mrwhiteTimeout) { clearTimeout(room._mrwhiteTimeout); room._mrwhiteTimeout = null; }
     const correct = guess.trim().toLowerCase() === room.chosenPair.civ.toLowerCase();
     const mw = room.players.find(p => p.id === room.mrWhiteId);
     if (correct) {
@@ -398,12 +487,7 @@ io.on('connection', (socket) => {
   socket.on('restart', ({ code }) => {
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
-    clearTimers(room);
-    room.phase = 'lobby';
-    room.players.forEach(p => { p.role = null; p.word = null; p.eliminated = false; p.roleRevealed = false; p.wordsGiven = []; p.score = 0; });
-    room.currentRound = 1; room.distributeIndex = 0;
-    room.votes = {}; room.voteRevealed = {}; room.logs = [];
-    room.roundRecap = null; room.finalScores = null;
+    resetRoomToLobby(room);
     io.to(code).emit('game_state', publicState(room));
   });
 
@@ -411,19 +495,40 @@ io.on('connection', (socket) => {
     for (const code in rooms) {
       const room = rooms[code];
       const p = room.players.find(p => p.id === socket.id);
-      if (p) {
-        p.connected = false;
-        io.to(code).emit('game_state', publicState(room));
-        if (room.players.every(p => !p.connected)) {
-          setTimeout(() => {
-            if (rooms[code] && rooms[code].players.every(p => !p.connected)) {
-              clearTimers(rooms[code]);
-              delete rooms[code];
-            }
-          }, 30 * 60 * 1000);
-        }
+      if (!p) continue;
+
+      p.connected = false;
+      io.to(code).emit('game_state', publicState(room));
+
+      // Reassign host if needed
+      reassignHost(room);
+
+      // If all disconnected, schedule cleanup
+      if (room.players.every(p => !p.connected)) {
+        clearTimers(room);
+        setTimeout(() => {
+          if (rooms[code] && rooms[code].players.every(p => !p.connected)) {
+            clearTimers(rooms[code]);
+            delete rooms[code];
+          }
+        }, 30 * 60 * 1000);
         break;
       }
+
+      // If game is in progress and this player was the current word player, skip their turn
+      if (room.phase === 'words' && room.currentWordPlayer === socket.id) {
+        room.logs.push(`${p.name} s'est déconnecté, tour passé.`);
+        clearTimers(room);
+        room.wordPlayerIndex++;
+        advanceWordPlayer(room);
+      }
+
+      // If game is in vote phase, check if all remaining connected players voted
+      if (room.phase === 'vote') {
+        checkAllVoted(room);
+      }
+
+      break;
     }
   });
 });

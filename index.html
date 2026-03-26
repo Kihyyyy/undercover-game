@@ -26,6 +26,22 @@
   --r: 10px;
   --rl: 16px;
 }
+[data-theme="dark"] {
+  --bg: #0f0f0f;
+  --s1: #1a1a1a;
+  --s2: #222222;
+  --s3: #2a2a2a;
+  --border: #2e2e2e;
+  --border2: #3a3a3a;
+  --accent: #e8365d;
+  --aglow: rgba(232,54,93,0.15);
+  --teal: #00c9a0;
+  --amber: #f5a623;
+  --blue: #4a9eff;
+  --text: #f0f0f0;
+  --muted: #555555;
+  --muted2: #888888;
+}
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-height:100dvh;overflow-x:hidden;}
@@ -256,6 +272,10 @@ textarea{resize:vertical;min-height:90px;}
 .mrb-word.mrwhite{color:var(--amber);}
 .mrb-badge{font-size:10px;color:var(--muted2);}
 
+/* THEME TOGGLE */
+.theme-btn{background:none;border:1px solid var(--border2);border-radius:8px;color:var(--muted2);font-size:15px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s;}
+.theme-btn:hover{background:var(--s2);color:var(--text);}
+
 @media(max-width:380px){.home-title{font-size:54px;}.g3{grid-template-columns:1fr 1fr;}.preset-grid{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
@@ -264,6 +284,7 @@ textarea{resize:vertical;min-height:90px;}
 <!-- ══ HOME ══ -->
 <div id="s-home" class="screen active">
   <div class="anim" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:40px 20px;text-align:center;">
+    <button class="theme-btn" onclick="toggleTheme()" id="home-theme-btn" style="position:fixed;top:16px;right:18px">🌙</button>
     <div class="home-title"><span class="d">UNDER</span><br><span class="r">COVER</span></div>
     <p class="home-sub">Jeu de déduction multijoueur. Trouve l'imposteur avant qu'il ne soit trop tard.</p>
     <div class="home-actions">
@@ -275,7 +296,7 @@ textarea{resize:vertical;min-height:90px;}
 
 <!-- ══ CREATE ══ -->
 <div id="s-create" class="screen">
-  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="goHome()">← Retour</button></div>
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="theme-btn" onclick="toggleTheme()" id="create-theme-btn" style="margin-left:auto;margin-right:8px">🌙</button><button class="btn btn-g btn-sm" onclick="goHome()">← Retour</button></div>
   <div class="pg">
     <div class="field"><div class="lbl">Ton pseudo</div><input type="text" id="create-name" placeholder="Ton nom…" maxlength="16"></div>
     <div class="field">
@@ -289,7 +310,7 @@ textarea{resize:vertical;min-height:90px;}
 
 <!-- ══ JOIN ══ -->
 <div id="s-join" class="screen">
-  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="btn btn-g btn-sm" style="margin-left:auto" onclick="goHome()">← Retour</button></div>
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><button class="theme-btn" onclick="toggleTheme()" style="margin-left:auto;margin-right:8px">🌙</button><button class="btn btn-g btn-sm" onclick="goHome()">← Retour</button></div>
   <div class="pg">
     <div class="field"><div class="lbl">Ton pseudo</div><input type="text" id="join-name" placeholder="Ton nom…" maxlength="16"></div>
     <div class="field">
@@ -304,7 +325,7 @@ textarea{resize:vertical;min-height:90px;}
 
 <!-- ══ LOBBY ══ -->
 <div id="s-lobby" class="screen">
-  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right"><button class="btn btn-g btn-sm" onclick="goHome()">Quitter</button></div></div>
+  <div class="hdr"><div class="logo">UNDER<span>COVER</span></div><div class="hdr-right"><button class="theme-btn" onclick="toggleTheme()">🌙</button><button class="btn btn-g btn-sm" onclick="goHome()">Quitter</button></div></div>
   <div class="pg">
     <div class="card">
       <div class="lbl">Code du salon</div>
@@ -676,7 +697,13 @@ function goTo(id) {
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
 }
-function goHome() { myId=null;myCode=null;myRole=null;myWord=null;myVote=null; goTo('s-home'); }
+function goHome() {
+  myId=null; myCode=null; myRole=null; myWord=null; myVote=null;
+  sessionStorage.removeItem('uc_code');
+  sessionStorage.removeItem('uc_name');
+  sessionStorage.removeItem('uc_avatar');
+  goTo('s-home');
+}
 function showCreate() { goTo('s-create'); }
 function showJoin() {
   const p = new URLSearchParams(window.location.search);
@@ -688,7 +715,21 @@ function showJoin() {
 socket.on('room_joined', ({ code, playerId }) => {
   myId = playerId; myCode = code;
   document.getElementById('lobby-code').textContent = code;
+  // Save session for auto-rejoin on reconnect
+  sessionStorage.setItem('uc_code', code);
+  sessionStorage.setItem('uc_name', myName || '');
+  sessionStorage.setItem('uc_avatar', selectedAvatar || '');
   goTo('s-lobby');
+});
+
+socket.on('connect', () => {
+  // Auto-rejoin if we were in a game and socket reconnected
+  const code = sessionStorage.getItem('uc_code');
+  const name = sessionStorage.getItem('uc_name');
+  const avatar = sessionStorage.getItem('uc_avatar');
+  if (code && name && myCode) {
+    socket.emit('rejoin_room', { code, name, avatar });
+  }
 });
 
 socket.on('game_state', (s) => {
@@ -911,7 +952,10 @@ function renderEnd(s) {
   document.getElementById('end-restart-btn').style.display = s.host === myId ? '' : 'none';
 }
 
-function restartGame() { socket.emit('restart', { code: myCode }); }
+function restartGame() {
+  myVote = null; myRole = null; myTrueRole = null; myWord = null;
+  socket.emit('restart', { code: myCode });
+}
 
 // ── TIMER UI ──────────────────────────────────────────────────────────────────
 function updateTimerUI(time) {
@@ -1071,7 +1115,22 @@ function notify(msg) {
 window.addEventListener('load', () => {
   const p = new URLSearchParams(window.location.search);
   if (p.get('code')) showJoin();
+  // Restore saved theme
+  const saved = localStorage.getItem('theme') || 'light';
+  if (saved === 'dark') applyTheme('dark');
 });
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = theme === 'dark' ? '☀️' : '🌙';
+  document.querySelectorAll('.theme-btn').forEach(b => b.textContent = icon);
+  localStorage.setItem('theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
 </script>
 </body>
 </html>
