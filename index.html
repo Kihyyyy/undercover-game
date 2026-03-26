@@ -9,24 +9,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #12214e;
-  --s1: #192f70;
-  --s2: ##9cb5ff;
-  --s3: #12214e;
-  --border: #dddbd7;
-  --border2: #ccc9c4;
-  --accent: #e8365d;
-  --aglow: rgba(232,54,93,0.15);
-  --teal: #00a884;
-  --amber: #d4870a;
-  --blue: #2d7dd2;
-  --text: #1a1916;
-  --muted: #9e9b96;
-  --muted2: #6e6b65;
-  --r: 10px;
-  --rl: 16px;
-}
-[data-theme="dark"] {
   --bg: #0f0f0f;
   --s1: #1a1a1a;
   --s2: #222222;
@@ -41,6 +23,24 @@
   --text: #f0f0f0;
   --muted: #555555;
   --muted2: #888888;
+  --r: 10px;
+  --rl: 16px;
+}
+[data-theme="light"] {
+  --bg: #f5f4f0;
+  --s1: #ffffff;
+  --s2: #eeecea;
+  --s3: #e4e2de;
+  --border: #dddbd7;
+  --border2: #ccc9c4;
+  --accent: #e8365d;
+  --aglow: rgba(232,54,93,0.15);
+  --teal: #00a884;
+  --amber: #d4870a;
+  --blue: #2d7dd2;
+  --text: #1a1916;
+  --muted: #9e9b96;
+  --muted2: #6e6b65;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
@@ -1115,20 +1115,23 @@ function notify(msg) {
 window.addEventListener('load', () => {
   const p = new URLSearchParams(window.location.search);
   if (p.get('code')) showJoin();
-  // Restore saved theme
-  const saved = localStorage.getItem('theme') || 'light';
-  if (saved === 'dark') applyTheme('dark');
+  const saved = localStorage.getItem('theme') || 'dark';
+  applyTheme(saved);
 });
 
 function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
   const icon = theme === 'dark' ? '☀️' : '🌙';
   document.querySelectorAll('.theme-btn').forEach(b => b.textContent = icon);
   localStorage.setItem('theme', theme);
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const current = localStorage.getItem('theme') || 'dark';
   applyTheme(current === 'dark' ? 'light' : 'dark');
 }
 </script>
