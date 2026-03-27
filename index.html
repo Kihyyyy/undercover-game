@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Undercover</title>
+<!-- Apply theme before render to avoid flash -->
+<script>
+  (function(){
+    var t = localStorage.getItem('theme') || 'dark';
+    if (t === 'light') document.documentElement.setAttribute('data-theme','light');
+  })();
+</script>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap');
